@@ -1,32 +1,56 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+### https://raw.github.com/github/gitignore/6c87d249af5f2b3f8ab65ae0a2648682ee4e8a2d/Node.gitignore
 
-# Test binary, built with `go test -c`
-*.test
+# Logs
+logs
+*.log
 
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Coverage directory used by tools like istanbul
+coverage
+coverage.out
+coverage.html
+cover.out
+cover.html
+*.lcov
 
-# Go workspace file
-go.work
-go.work.sum
+# Grunt intermediate storage (https://gruntjs.com/creating-plugins#storing-task-files)
+.grunt
 
-# env file
+# Bower dependency directory (https://bower.io/)
+bower_components
+
+# node-waf configuration
+.lock-wscript
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variables file
 .env
+.env.test
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# Gatsby files
+.cache/
+
+# Serverless directories
+.serverless/
+
+# FuseBox cache
+.fusebox/
+
+# Stores VSCode versions used for testing VSCode extensions
+.vscode-test
+
+.github/prompts/*
+shared/repos/*
+!.gitkeep
+!**/templates/**/.env.example
+
+.tmp
+dist/
+
