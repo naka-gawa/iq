@@ -49,7 +49,7 @@ bower_components
 .github/prompts/*
 shared/repos/*
 !.gitkeep
-!**/templates/**/.env
+!**/templates/**/.env.example
 
 .tmp
 dist/
