@@ -1,10 +1,12 @@
 package main
 
 import (
+	stderrors "errors"
 	"fmt"
 	"os"
 
 	"iq/cmd"
+	iqerr "iq/internal/errors"
 )
 
 var (
@@ -17,6 +19,10 @@ func main() {
 
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "ERROR: %v\n", err)
-		os.Exit(1)
+		exitCode := 1
+		if stderrors.Is(err, iqerr.ErrKeyNotFound) {
+			exitCode = 2
+		}
+		os.Exit(exitCode)
 	}
 }
