@@ -9,7 +9,7 @@
 //	ErrKeyNotFound     -> exit 2
 //	ErrPathInvalid     -> exit 1
 //	ErrFileParseFailed -> exit 1
-//	ErrDialecDetect    -> exit 1
+//	ErrDialectDetect   -> exit 1
 //
 // Callers should import this package with an alias to avoid collision
 // with the standard library errors package:
@@ -29,7 +29,7 @@ var (
 	ErrKeyNotFound     = errors.New("key not found")
 	ErrPathInvalid     = errors.New("invalid path expression")
 	ErrFileParseFailed = errors.New("failed to parse INI file")
-	ErrDialecDetect    = errors.New("failed to detect dialect")
+	ErrDialectDetect   = errors.New("failed to detect dialect")
 )
 
 // KeyNotFoundError unwraps to [ErrKeyNotFound].
