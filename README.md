@@ -10,7 +10,7 @@ A lightweight, portable CLI for reading, writing, and transforming INI configura
 
 `iq` brings the expressiveness of `jq` to INI files. You can query, mutate, and reformat any INI file without losing comments, blank lines, or key ordering. It reads from files or stdin and writes to stdout or back in-place.
 
-```
+```bash
 iq '.database.host' config.ini
 # → "localhost"
 
@@ -104,8 +104,8 @@ iq '.Service.ExecStart | select(test("pre-start"))' service.service
 | `--in-place` | `-i` | `false` | Write mutations back to the original file |
 | `--output` | `-o` | `ini` | Output format: `ini` or `json` |
 | `--raw-strings` | — | `false` | Disable JSON type coercion (all values as strings) |
-| `--profile` | — | `generic` | Dialect profile: `generic`, `systemd`, `gitconfig` |
-| `--ignore-case` | — | `false` | Case-insensitive key matching |
+| `--profile` | — | `generic` | Dialect profile *(planned; currently accepted but not applied)* |
+| `--ignore-case` | — | `false` | Case-insensitive key matching *(planned; currently accepted but not applied)* |
 
 ## Prerequisites / Environment
 
@@ -161,13 +161,7 @@ Comments and structure are preserved exactly.
 | `1` | General error (parse failure, bad path, permission denied) |
 | `2` | Key or section not found |
 
-**Dialect profiles** let `iq` handle INI variants correctly:
-
-| Profile | Auto-detected for | Notes |
-|---|---|---|
-| `generic` | default | Standard INI |
-| `systemd` | `.service`, `.target`, `.socket` | Duplicate keys as arrays; line continuation |
-| `gitconfig` | `.gitconfig`, `.git/config` | Subsection syntax; case folding |
+**Dialect profiles** are planned for handling INI variants (systemd units, gitconfig). Currently only `generic` is active; `systemd` and `gitconfig` auto-detection is not yet implemented.
 
 **Interactive TUI** (`--interactive` / `-I`) is planned and not yet implemented.
 
