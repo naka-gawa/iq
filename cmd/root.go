@@ -2,17 +2,44 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 
 	"iq/internal/dialect"
+	iqerr "iq/internal/errors"
 	"iq/internal/mutation"
 	"iq/internal/parser"
 	"iq/internal/query"
 	"iq/internal/serializer"
+	"iq/internal/tui"
 )
+
+var (
+	colorBool   = color.New(color.FgYellow)
+	colorNumber = color.New(color.FgCyan)
+	colorNull   = color.New(color.Faint)
+)
+
+// printResult writes a single query result to w with TTY-aware syntax highlighting.
+// color is suppressed automatically when w is not a terminal (fatih/color behaviour).
+func printResult(w io.Writer, v any, formatted string) {
+	switch v.(type) {
+	case bool:
+		colorBool.Fprintln(w, formatted)
+	case int, float64:
+		colorNumber.Fprintln(w, formatted)
+	default:
+		if formatted == "null" {
+			colorNull.Fprintln(w, formatted)
+		} else {
+			fmt.Fprintln(w, formatted)
+		}
+	}
+}
 
 var (
 	version  string
@@ -22,9 +49,10 @@ var (
 // NewRootCommand builds the root cobra command with all CLI flags registered.
 func NewRootCommand() *cobra.Command {
 	var (
-		isInPlace  bool
-		outputFmt  string
-		rawStrings bool
+		isInPlace   bool
+		interactive bool
+		outputFmt   string
+		rawStrings  bool
 	)
 
 	cmd := &cobra.Command{
@@ -34,19 +62,27 @@ func NewRootCommand() *cobra.Command {
 		SilenceUsage: true,
 		Args:         cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
+			if len(args) == 0 && !interactive {
 				return cmd.Help()
 			}
-			expr := args[0]
+			expr := ""
 			filePath := ""
-			if len(args) > 1 {
-				filePath = args[1]
+			if interactive {
+				if len(args) > 0 {
+					filePath = args[0]
+				}
+			} else {
+				expr = args[0]
+				if len(args) > 1 {
+					filePath = args[1]
+				}
 			}
-			return dispatch(cmd, expr, filePath, isInPlace, outputFmt, rawStrings)
+			return dispatch(cmd, expr, filePath, isInPlace, interactive, outputFmt, rawStrings)
 		},
 	}
 
 	cmd.Flags().BoolVarP(&isInPlace, "in-place", "i", false, "write result back to the original file")
+	cmd.Flags().BoolVarP(&interactive, "interactive", "I", false, "launch interactive query mode (TUI)")
 	cmd.Flags().StringVarP(&outputFmt, "output", "o", "ini", "output format: ini or json")
 	cmd.Flags().BoolVar(&rawStrings, "raw-strings", false, "disable JSON type coercion")
 	// --profile and --ignore-case are accepted but not yet wired (post-MVP).
@@ -81,7 +117,28 @@ func newVersionCommand() *cobra.Command {
 }
 
 // dispatch routes a parsed request to the correct pipeline stage.
-func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace bool, outputFmt string, rawStrings bool) error {
+func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive bool, outputFmt string, rawStrings bool) error {
+	if interactive && isInPlace {
+		return fmt.Errorf("--interactive and --in-place cannot be used together: %w", iqerr.ErrPathInvalid)
+	}
+	if interactive {
+		if filePath == "" {
+			return fmt.Errorf("--interactive requires a file argument: %w", iqerr.ErrPathInvalid)
+		}
+		f, err := parser.Parse(filePath, dialect.ProfileGeneric)
+		if err != nil {
+			return err
+		}
+		chosen, err := tui.Run(f, filePath)
+		if err != nil {
+			return err
+		}
+		if chosen != "" {
+			fmt.Fprintln(cmd.OutOrStdout(), chosen)
+		}
+		return nil
+	}
+
 	f, err := parser.Parse(filePath, dialect.ProfileGeneric)
 	if err != nil {
 		return err
@@ -118,7 +175,7 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace bool, outputF
 		if fmtErr != nil {
 			return fmtErr
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), s)
+		printResult(cmd.OutOrStdout(), v, s)
 	}
 	return nil
 }

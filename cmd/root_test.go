@@ -112,7 +112,7 @@ func runDispatch(t *testing.T, expr, filePath string, isInPlace bool, outputFmt 
 	cmd := NewRootCommand()
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
-	err := dispatch(cmd, expr, filePath, isInPlace, outputFmt, rawStrings)
+	err := dispatch(cmd, expr, filePath, isInPlace, false, outputFmt, rawStrings)
 	return buf.String(), err
 }
 
