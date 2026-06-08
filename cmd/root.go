@@ -82,9 +82,7 @@ func newVersionCommand() *cobra.Command {
 
 // dispatch routes a parsed request to the correct pipeline stage.
 func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace bool, outputFmt string, rawStrings bool) error {
-	prof := dialect.ProfileGeneric
-
-	f, err := parser.Parse(filePath, prof)
+	f, err := parser.Parse(filePath, dialect.ProfileGeneric)
 	if err != nil {
 		return err
 	}
@@ -214,7 +212,7 @@ func parseDotPath(path string) (section, key string, err error) {
 func resolveValue(rhs string) string {
 	// strenv(VAR) → read from environment.
 	if strings.HasPrefix(rhs, "strenv(") && strings.HasSuffix(rhs, ")") {
-		envVar := rhs[7 : len(rhs)-1]
+		envVar := strings.TrimSuffix(strings.TrimPrefix(rhs, "strenv("), ")")
 		return os.Getenv(envVar)
 	}
 	// Quoted string → unquote.
