@@ -97,15 +97,15 @@ func toMap(f *ini.File) map[string]any {
 		secMap := make(map[string]any)
 		for _, k := range sec.Keys() {
 			shadows := k.ValueWithShadows()
-			if len(shadows) > 1 {
-				vals := make([]any, len(shadows))
-				for i, s := range shadows {
-					vals[i] = s
-				}
-				secMap[k.Name()] = vals
-			} else {
+			if len(shadows) <= 1 {
 				secMap[k.Name()] = k.Value()
+				continue
 			}
+			vals := make([]any, len(shadows))
+			for i, s := range shadows {
+				vals[i] = s
+			}
+			secMap[k.Name()] = vals
 		}
 		result[name] = secMap
 	}

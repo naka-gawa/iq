@@ -32,6 +32,7 @@ func NewRootCommand() *cobra.Command {
 		Short:        "iq is an INI query tool",
 		Long:         `iq is a fast and flexible CLI tool for parsing INI files.`,
 		SilenceUsage: true,
+		Args:         cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
@@ -74,16 +75,14 @@ func newVersionCommand() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version number of iq",
 		Run: func(cmd *cobra.Command, args []string) {
-			cmd.Printf("iq version %s, revision %s\n", version, revision)
+			fmt.Fprintf(cmd.OutOrStdout(), "iq version %s, revision %s\n", version, revision)
 		},
 	}
 }
 
 // dispatch routes a parsed request to the correct pipeline stage.
 func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace bool, outputFmt string, rawStrings bool) error {
-	prof := dialect.ProfileGeneric
-
-	f, err := parser.Parse(filePath, prof)
+	f, err := parser.Parse(filePath, dialect.ProfileGeneric)
 	if err != nil {
 		return err
 	}
@@ -213,7 +212,7 @@ func parseDotPath(path string) (section, key string, err error) {
 func resolveValue(rhs string) string {
 	// strenv(VAR) → read from environment.
 	if strings.HasPrefix(rhs, "strenv(") && strings.HasSuffix(rhs, ")") {
-		envVar := rhs[7 : len(rhs)-1]
+		envVar := strings.TrimSuffix(strings.TrimPrefix(rhs, "strenv("), ")")
 		return os.Getenv(envVar)
 	}
 	// Quoted string → unquote.
