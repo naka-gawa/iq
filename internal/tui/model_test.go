@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/ini.v1"
@@ -64,9 +64,10 @@ func TestUpdate_QueryEvaluation(t *testing.T) {
 			expectInView: []string{"localhost"},
 		},
 		{
-			name:            "invalid expression shows no ANSI and no valid result",
+			name:            "invalid expression shows error and no valid result",
 			inputRunes:      "{{bad}}",
-			expectNotInView: []string{"\x1b[", "localhost"},
+			expectInView:    []string{"invalid"},
+			expectNotInView: []string{"localhost"},
 		},
 	}
 
@@ -76,16 +77,16 @@ func TestUpdate_QueryEvaluation(t *testing.T) {
 			m := tui.New(f, "basic.ini")
 
 			for _, r := range tt.inputRunes {
-				updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				updated, _ := m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 				m = updated.(tui.Model)
 			}
 
-			view := m.View()
+			content := m.View().Content
 			for _, want := range tt.expectInView {
-				assert.Contains(t, view, want)
+				assert.Contains(t, content, want)
 			}
 			for _, notWant := range tt.expectNotInView {
-				assert.NotContains(t, view, notWant)
+				assert.NotContains(t, content, notWant)
 			}
 		})
 	}
@@ -97,25 +98,25 @@ func TestUpdate_KeyboardControls(t *testing.T) {
 	tests := []struct {
 		name           string
 		inputRunes     string
-		terminationKey tea.KeyType
+		terminationKey tea.KeyPressMsg
 		expectChosen   string
 	}{
 		{
 			name:           "Enter commits query",
 			inputRunes:     ".database.host",
-			terminationKey: tea.KeyEnter,
+			terminationKey: tea.KeyPressMsg{Code: tea.KeyEnter},
 			expectChosen:   ".database.host",
 		},
 		{
 			name:           "Esc clears chosen",
 			inputRunes:     ".database.host",
-			terminationKey: tea.KeyEsc,
+			terminationKey: tea.KeyPressMsg{Code: tea.KeyEsc},
 			expectChosen:   "",
 		},
 		{
 			name:           "Ctrl+C clears chosen",
 			inputRunes:     "",
-			terminationKey: tea.KeyCtrlC,
+			terminationKey: tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl},
 			expectChosen:   "",
 		},
 	}
@@ -126,11 +127,11 @@ func TestUpdate_KeyboardControls(t *testing.T) {
 			m := tui.New(f, "basic.ini")
 
 			for _, r := range tt.inputRunes {
-				updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				updated, _ := m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 				m = updated.(tui.Model)
 			}
 
-			updated, _ := m.Update(tea.KeyMsg{Type: tt.terminationKey})
+			updated, _ := m.Update(tt.terminationKey)
 			final := updated.(tui.Model)
 
 			assert.Equal(t, tt.expectChosen, final.Chosen())

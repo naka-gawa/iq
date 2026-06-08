@@ -4,8 +4,8 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/bubbles/v2/textinput"
 	"gopkg.in/ini.v1"
 
 	"iq/internal/query"
@@ -46,12 +46,12 @@ func (m Model) Init() tea.Cmd { return textinput.Blink }
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEnter:
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "enter":
 			m.chosen = m.input.Value()
 			return m, tea.Quit
-		case tea.KeyEsc, tea.KeyCtrlC:
+		case "esc", "ctrl+c":
 			m.chosen = ""
 			return m, tea.Quit
 		default:
@@ -64,19 +64,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // View satisfies tea.Model; renders the two-pane layout.
-func (m Model) View() string {
+func (m Model) View() tea.View {
 	preview := m.result
 	if m.errMsg != "" {
 		preview = m.errMsg
 	}
-	return preview + "\n\n> " + m.input.View()
+	v := tea.NewView(preview + "\n\n> " + m.input.View())
+	v.AltScreen = true
+	return v
 }
 
 // Run starts the bubbletea program and returns the chosen query string.
 // Returns an empty string when the user exits without committing (Esc/Ctrl+C).
 func Run(f *ini.File, filePath string) (string, error) {
 	m := New(f, filePath)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m)
 	final, err := p.Run()
 	if err != nil {
 		return "", err
