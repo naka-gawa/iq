@@ -18,6 +18,11 @@ func TransformMap(profile Profile, m map[string]any) map[string]any {
 		}
 		if _, exists := result[section]; !exists {
 			result[section] = make(map[string]any)
+		} else if _, ok := result[section].(map[string]any); !ok {
+			// A scalar key already occupies this name (e.g. a global key named
+			// "remote" conflicts with a [remote "origin"] subsection). Skip rather
+			// than panic; the scalar takes precedence.
+			continue
 		}
 		result[section].(map[string]any)[sub] = v
 	}
