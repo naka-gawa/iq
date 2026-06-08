@@ -4,8 +4,8 @@ package tui
 import (
 	"strings"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
 	"gopkg.in/ini.v1"
 
 	"iq/internal/query"
@@ -97,7 +97,7 @@ func evalQuery(f *ini.File, expr string) (result, errMsg string) {
 		return sb.String(), ""
 	}
 
-	vals, err := query.Execute(f, expr)
+	vals, err := query.Execute(f, expr, nil)
 	if err != nil {
 		return "", err.Error()
 	}

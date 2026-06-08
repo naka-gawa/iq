@@ -129,7 +129,7 @@ func TestWriteJSON_TypeCoercion(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, serializer.WriteJSON(f, &buf, false))
+	require.NoError(t, serializer.WriteJSON(f, &buf, false, nil))
 
 	out := buf.String()
 	// Numeric port values must be coerced to numbers in JSON output.
@@ -144,7 +144,7 @@ func TestWriteJSON_RawStrings_NoCoercion(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, serializer.WriteJSON(f, &buf, true))
+	require.NoError(t, serializer.WriteJSON(f, &buf, true, nil))
 
 	out := buf.String()
 	// With rawStrings=true, port must be a JSON string, not a number.
@@ -157,7 +157,7 @@ func TestWriteJSON_BoolCoercion(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, serializer.WriteJSON(f, &buf, false))
+	require.NoError(t, serializer.WriteJSON(f, &buf, false, nil))
 
 	out := buf.String()
 	// "false" must be coerced to JSON false (not "false").
@@ -175,7 +175,7 @@ func TestWriteJSON_FloatCoercion(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, serializer.WriteJSON(f, &buf, false))
+	require.NoError(t, serializer.WriteJSON(f, &buf, false, nil))
 
 	out := buf.String()
 	assert.Contains(t, out, `3.14`)
@@ -188,7 +188,7 @@ func TestWriteJSON_IsValidJSON(t *testing.T) {
 	require.NoError(t, err)
 
 	var buf bytes.Buffer
-	require.NoError(t, serializer.WriteJSON(f, &buf, false))
+	require.NoError(t, serializer.WriteJSON(f, &buf, false, nil))
 
 	// Output must be valid JSON.
 	var result map[string]any

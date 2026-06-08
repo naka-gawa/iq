@@ -21,10 +21,17 @@ var (
 	testdataDir string
 )
 
+var (
+	testdataSystemd   string
+	testdataGitconfig string
+)
+
 func TestMain(m *testing.M) {
 	_, currentFile, _, _ := runtime.Caller(0)
 	projectRoot = filepath.Join(filepath.Dir(currentFile), "../..")
 	testdataDir = filepath.Join(projectRoot, "testdata", "generic")
+	testdataSystemd = filepath.Join(projectRoot, "testdata", "systemd")
+	testdataGitconfig = filepath.Join(projectRoot, "testdata", "gitconfig")
 
 	tmpDir, err := os.MkdirTemp("", "iq-e2e-*")
 	if err != nil {
@@ -335,8 +342,150 @@ func TestE2E_Filter_Test_InvalidRegex_ExitsOne(t *testing.T) {
 	assert.Contains(t, stderr, "ERROR:")
 }
 
+// --- Scenario: unknown --profile value → exit 1 ---
+
+func TestE2E_UnknownProfile_ExitCode1(t *testing.T) {
+	_, stderr, exitCode := iq(t, "--profile", "bogus", ".key", filepath.Join(testdataDir, "basic.ini"))
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, stderr, "ERROR:")
+}
+
+// --- Scenario: --profile generic is explicit and behaves like default ---
+
+func TestE2E_ProfileGeneric_Explicit(t *testing.T) {
+	stdout, _, exitCode := iq(t, "--profile", "generic", ".database.host", filepath.Join(testdataDir, "basic.ini"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "localhost\n", stdout)
+}
+
+// --- Scenario: --ignore-case (#54) ---
+
+func TestE2E_CaseSensitive_Default_UppercaseKeyFound(t *testing.T) {
+	// Uppercase key is in the fixture; case-sensitive default finds it.
+	stdout, _, exitCode := iq(t, ".database.HOST", filepath.Join(testdataDir, "case_sensitivity.ini"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "localhost\n", stdout)
+}
+
+func TestE2E_CaseSensitive_Default_LowercaseKeyMissing(t *testing.T) {
+	// Without --ignore-case, lowercase query on uppercase key → exit 2.
+	_, _, exitCode := iq(t, ".database.host", filepath.Join(testdataDir, "case_sensitivity.ini"))
+	assert.Equal(t, 2, exitCode)
+}
+
+func TestE2E_IgnoreCase_QuerySucceeds(t *testing.T) {
+	stdout, _, exitCode := iq(t, "--ignore-case", ".database.host", filepath.Join(testdataDir, "case_sensitivity.ini"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "localhost\n", stdout)
+}
+
+func TestE2E_IgnoreCase_WithProfile(t *testing.T) {
+	stdout, _, exitCode := iq(t, "--profile", "generic", "--ignore-case", ".database.host", filepath.Join(testdataDir, "case_sensitivity.ini"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "localhost\n", stdout)
+}
+
+// --- Scenario: systemd profile (#55) ---
+
+func TestE2E_Systemd_AutoDetect_Type(t *testing.T) {
+	stdout, _, exitCode := iq(t, ".Service.Type", filepath.Join(testdataSystemd, "unit.service"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "simple\n", stdout)
+}
+
+func TestE2E_Systemd_DuplicateKeys_Array(t *testing.T) {
+	stdout, _, exitCode := iq(t, ".Service.ExecStart[]", filepath.Join(testdataSystemd, "unit.service"))
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, "--first")
+	assert.Contains(t, stdout, "/usr/bin/myapp --second")
+}
+
+func TestE2E_Systemd_LineContinuation(t *testing.T) {
+	// The first ExecStart has a \ continuation; it should be joined into one value.
+	stdout, _, exitCode := iq(t, ".Service.ExecStart[0]", filepath.Join(testdataSystemd, "unit.service"))
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, "--first")
+	assert.Contains(t, stdout, "--config")
+}
+
+func TestE2E_Systemd_InlineComment_PreservedInValue(t *testing.T) {
+	// IgnoreInlineComment: true means "; inline semicolon stays in value" is part of the value.
+	stdout, _, exitCode := iq(t, ".Service.ExecCondition", filepath.Join(testdataSystemd, "unit.service"))
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, ";")
+}
+
+func TestE2E_Systemd_ProfileFlag_On_INI(t *testing.T) {
+	// Explicit --profile systemd on a plain .ini with duplicate keys.
+	path := writeTempSystemdINI(t, "[Service]\nExecStart=/a\nExecStart=/b\n")
+	stdout, _, exitCode := iq(t, "--profile", "systemd", ".Service.ExecStart[]", path)
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, "/a")
+	assert.Contains(t, stdout, "/b")
+}
+
+func writeTempSystemdINI(t *testing.T, content string) string {
+	t.Helper()
+	tmp, err := os.CreateTemp(t.TempDir(), "iq-systemd-*.ini")
+	require.NoError(t, err)
+	_, err = tmp.WriteString(content)
+	require.NoError(t, err)
+	require.NoError(t, tmp.Close())
+	return tmp.Name()
+}
+
+// --- Scenario: gitconfig profile (#56) ---
+
+func TestE2E_Gitconfig_CoreKey(t *testing.T) {
+	stdout, _, exitCode := iq(t, "--profile", "gitconfig", ".core.bare", filepath.Join(testdataGitconfig, "config"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "false\n", stdout)
+}
+
+func TestE2E_Gitconfig_Subsection_URL(t *testing.T) {
+	stdout, _, exitCode := iq(t, "--profile", "gitconfig", ".remote.origin.url", filepath.Join(testdataGitconfig, "config"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "https://github.com/example/repo.git\n", stdout)
+}
+
+func TestE2E_Gitconfig_Subsection_Branch(t *testing.T) {
+	stdout, _, exitCode := iq(t, "--profile", "gitconfig", ".branch.main.remote", filepath.Join(testdataGitconfig, "config"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "origin\n", stdout)
+}
+
+func TestE2E_Gitconfig_SubsectionCaseSensitive(t *testing.T) {
+	// Subsection names are case-sensitive after normalization: "Origin" != "origin".
+	_, _, exitCode := iq(t, "--profile", "gitconfig", ".remote.Origin.url", filepath.Join(testdataGitconfig, "config"))
+	assert.Equal(t, 2, exitCode)
+}
+
+func TestE2E_Gitconfig_AutoDetect_GitconfigFile(t *testing.T) {
+	// A file named .gitconfig should be auto-detected as gitconfig profile.
+	tmp, err := os.CreateTemp(t.TempDir(), ".gitconfig")
+	require.NoError(t, err)
+	_, err = tmp.WriteString("[user]\n\tname = Test User\n\temail = test@example.com\n")
+	require.NoError(t, err)
+	require.NoError(t, tmp.Close())
+
+	// Rename to .gitconfig (CreateTemp adds random suffix).
+	gitconfigPath := filepath.Join(filepath.Dir(tmp.Name()), ".gitconfig")
+	require.NoError(t, os.Rename(tmp.Name(), gitconfigPath))
+
+	stdout, _, exitCode := iq(t, ".user.name", gitconfigPath)
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "Test User\n", stdout)
+}
+
+func TestE2E_Gitconfig_JSON_Subsection(t *testing.T) {
+	stdout, _, exitCode := iq(t, "--profile", "gitconfig", "--output", "json", ".", filepath.Join(testdataGitconfig, "config"))
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, `"remote"`)
+	assert.Contains(t, stdout, `"origin"`)
+	assert.Contains(t, stdout, `"url"`)
+}
+
 // keys[] is used here because AllowShadows is not yet exposed as a CLI flag.
-// Duplicate-key ExecStart[] E2E tests will be added when --profile (#53) is wired.
 
 func TestE2E_ArrayIter_Keys(t *testing.T) {
 	stdout, _, exitCode := iq(t, ".database | keys[]", filepath.Join(testdataDir, "basic.ini"))

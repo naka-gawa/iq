@@ -84,8 +84,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&interactive, "interactive", "I", false, "launch interactive query mode (TUI)")
 	cmd.Flags().StringVarP(&outputFmt, "output", "o", "ini", "output format: ini or json")
 	cmd.Flags().BoolVar(&rawStrings, "raw-strings", false, "disable JSON type coercion")
-	// --profile and --ignore-case are accepted but not yet wired (post-MVP).
-	cmd.Flags().String("profile", "generic", "dialect profile override")
+	cmd.Flags().String("profile", "generic", "dialect profile: generic, systemd, gitconfig")
 	cmd.Flags().Bool("ignore-case", false, "case-insensitive key matching")
 
 	return cmd
@@ -120,11 +119,23 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 	if interactive && isInPlace {
 		return fmt.Errorf("--interactive and --in-place cannot be used together")
 	}
+
+	// Resolve effective dialect profile.
+	prof, err := resolveProfile(cmd, filePath)
+	if err != nil {
+		return err
+	}
+
+	opts := prof.LoadOptions()
+	if ignoreCase, _ := cmd.Flags().GetBool("ignore-case"); ignoreCase {
+		opts.Insensitive = true
+	}
+
 	if interactive {
 		if filePath == "" {
 			return fmt.Errorf("--interactive requires a file argument")
 		}
-		f, err := parser.Parse(filePath, dialect.ProfileGeneric)
+		f, err := parser.ParseWithOptions(filePath, opts)
 		if err != nil {
 			return fmt.Errorf("parsing file for interactive mode: %w", err)
 		}
@@ -138,7 +149,7 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 		return nil
 	}
 
-	f, err := parser.Parse(filePath, dialect.ProfileGeneric)
+	f, err := parser.ParseWithOptions(filePath, opts)
 	if err != nil {
 		return err
 	}
@@ -159,13 +170,17 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 		return serializer.WriteInPlace(f, filePath)
 	}
 
+	transform := func(m map[string]any) map[string]any {
+		return dialect.TransformMap(prof, m)
+	}
+
 	// JSON conversion path.
 	if outputFmt == "json" {
-		return serializer.WriteJSON(f, cmd.OutOrStdout(), rawStrings)
+		return serializer.WriteJSON(f, cmd.OutOrStdout(), rawStrings, transform)
 	}
 
 	// Query path.
-	results, err := query.Execute(f, expr)
+	results, err := query.Execute(f, expr, transform)
 	if err != nil {
 		return err
 	}
@@ -177,6 +192,17 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 		printResult(cmd.OutOrStdout(), v, s)
 	}
 	return nil
+}
+
+// resolveProfile returns the effective dialect profile for the given file path.
+// If --profile was explicitly set, it is parsed and used. Otherwise the profile
+// is auto-detected from the file path.
+func resolveProfile(cmd *cobra.Command, filePath string) (dialect.Profile, error) {
+	if cmd.Flags().Changed("profile") {
+		profileFlag, _ := cmd.Flags().GetString("profile")
+		return dialect.ParseProfile(profileFlag)
+	}
+	return dialect.Detect(filePath), nil
 }
 
 // isMutationExpr reports whether expr contains an assignment or deletion.

@@ -64,8 +64,13 @@ func WriteINI(f *ini.File, w io.Writer) error {
 
 // WriteJSON renders the AST as a JSON object to w.
 // When rawStrings is false, numeric and boolean string values are type-coerced.
-func WriteJSON(f *ini.File, w io.Writer, rawStrings bool) error {
+// If transform is non-nil it is applied to the map before JSON encoding,
+// enabling dialect-specific restructuring (e.g. gitconfig subsection expansion).
+func WriteJSON(f *ini.File, w io.Writer, rawStrings bool, transform func(map[string]any) map[string]any) error {
 	m := toJSONMap(f, rawStrings)
+	if transform != nil {
+		m = transform(m)
+	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(m)

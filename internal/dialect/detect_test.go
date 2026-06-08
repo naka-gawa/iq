@@ -51,6 +51,68 @@ func TestDetect(t *testing.T) {
 			path: "file.toml",
 			want: dialect.ProfileGeneric,
 		},
+		// Systemd extensions
+		{
+			name: ".service returns ProfileSystemd",
+			path: "nginx.service",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: ".target returns ProfileSystemd",
+			path: "multi-user.target",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: ".socket returns ProfileSystemd",
+			path: "docker.socket",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: ".mount returns ProfileSystemd",
+			path: "home.mount",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: ".timer returns ProfileSystemd",
+			path: "backup.timer",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: ".path returns ProfileSystemd",
+			path: "watch.path",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: ".scope returns ProfileSystemd",
+			path: "session.scope",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: ".slice returns ProfileSystemd",
+			path: "system.slice",
+			want: dialect.ProfileSystemd,
+		},
+		{
+			name: "absolute path .service returns ProfileSystemd",
+			path: "/etc/systemd/system/myapp.service",
+			want: dialect.ProfileSystemd,
+		},
+		// Gitconfig basenames
+		{
+			name: ".gitconfig returns ProfileGitconfig",
+			path: ".gitconfig",
+			want: dialect.ProfileGitconfig,
+		},
+		{
+			name: "absolute .gitconfig path returns ProfileGitconfig",
+			path: "/home/user/.gitconfig",
+			want: dialect.ProfileGitconfig,
+		},
+		{
+			name: "config inside .git dir returns ProfileGitconfig",
+			path: "/repo/.git/config",
+			want: dialect.ProfileGitconfig,
+		},
 	}
 
 	for _, tt := range tests {
