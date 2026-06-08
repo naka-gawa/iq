@@ -305,3 +305,55 @@ func TestE2E_RawStrings_PortAsString(t *testing.T) {
 	assert.Equal(t, 0, exitCode)
 	assert.Contains(t, stdout, `"5432"`)
 }
+
+func TestE2E_Filter_SelectTest_Match(t *testing.T) {
+	path := copyFixture(t, "filter.ini")
+	stdout, _, exitCode := iq(t, `.service.exec | select(test("pre-start"))`, path)
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "/usr/bin/pre-start.sh\n", stdout)
+}
+
+func TestE2E_Filter_Select_NoMatch_ExitsZero(t *testing.T) {
+	path := copyFixture(t, "filter.ini")
+	stdout, _, exitCode := iq(t, `.service.name | select(. == "other")`, path)
+	assert.Equal(t, 0, exitCode)
+	assert.Empty(t, stdout)
+}
+
+func TestE2E_Filter_Test_Boolean(t *testing.T) {
+	path := copyFixture(t, "filter.ini")
+	stdout, _, exitCode := iq(t, `.service.name | test("auth")`, path)
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "true\n", stdout)
+}
+
+func TestE2E_Filter_Test_InvalidRegex_ExitsOne(t *testing.T) {
+	path := copyFixture(t, "filter.ini")
+	stdout, stderr, exitCode := iq(t, `.service.name | test("[bad")`, path)
+	assert.Equal(t, 1, exitCode)
+	assert.Empty(t, stdout)
+	assert.Contains(t, stderr, "ERROR:")
+}
+
+// keys[] is used here because AllowShadows is not yet exposed as a CLI flag.
+// Duplicate-key ExecStart[] E2E tests will be added when --profile (#53) is wired.
+
+func TestE2E_ArrayIter_Keys(t *testing.T) {
+	stdout, _, exitCode := iq(t, ".database | keys[]", filepath.Join(testdataDir, "basic.ini"))
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, "host\n")
+	assert.Contains(t, stdout, "name\n")
+	assert.Contains(t, stdout, "port\n")
+}
+
+func TestE2E_ArrayIter_Keys_SelectMatch(t *testing.T) {
+	stdout, _, exitCode := iq(t, `.database | keys[] | select(test("ho"))`, filepath.Join(testdataDir, "basic.ini"))
+	assert.Equal(t, 0, exitCode)
+	assert.Equal(t, "host\n", stdout)
+}
+
+func TestE2E_ArrayIter_Keys_SelectNoMatch_ExitsZero(t *testing.T) {
+	stdout, _, exitCode := iq(t, `.database | keys[] | select(test("zzz"))`, filepath.Join(testdataDir, "basic.ini"))
+	assert.Equal(t, 0, exitCode)
+	assert.Empty(t, stdout)
+}

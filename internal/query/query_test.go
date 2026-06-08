@@ -154,6 +154,149 @@ func TestFormatValue_Slice(t *testing.T) {
 	assert.JSONEq(t, `["a","b"]`, s)
 }
 
+func TestExecute_Select_MatchingValue(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.database.host | select(. == "localhost")`)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "localhost", results[0])
+}
+
+func TestExecute_Select_NoMatch_ReturnsNilNil(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.database.host | select(. == "other")`)
+	assert.NoError(t, err)
+	assert.Nil(t, results)
+}
+
+func TestExecute_MissingKey_ThenSelect_ReturnsNilNil(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	// select filters out the null produced by the missing key — empty set, not not-found.
+	results, err := query.Execute(f, `.database.nonexistent | select(. != null)`)
+	assert.NoError(t, err)
+	assert.Nil(t, results)
+}
+
+func TestExecute_Filter_Select_Match(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.name | select(. == "auth-service")`)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "auth-service", results[0])
+}
+
+func TestExecute_Filter_Select_NoMatch(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.name | select(. == "other")`)
+	assert.NoError(t, err)
+	assert.Nil(t, results)
+}
+
+func TestExecute_Filter_Test_Match(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.name | test("auth")`)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, true, results[0])
+}
+
+func TestExecute_Filter_Test_NoMatch(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.name | test("xyz")`)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, false, results[0])
+}
+
+func TestExecute_Filter_SelectTest_Match(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.exec | select(test("pre-start"))`)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "/usr/bin/pre-start.sh", results[0])
+}
+
+func TestExecute_Filter_SelectTest_NoMatch(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.exec | select(test("nomatch"))`)
+	assert.NoError(t, err)
+	assert.Nil(t, results)
+}
+
+func TestExecute_Filter_Test_InvalidRegex(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	_, err = query.Execute(f, `.service.name | test("[invalid")`)
+	require.Error(t, err)
+}
+
+func TestExecute_ArrayIter_DuplicateKeys(t *testing.T) {
+	opts := dialect.ProfileGeneric.LoadOptions()
+	opts.AllowShadows = true
+
+	f, err := parser.ParseWithOptions("../../testdata/generic/duplicate_keys.ini", opts)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, ".service.ExecStart[]")
+	require.NoError(t, err)
+	assert.Len(t, results, 3)
+	assert.Equal(t, "/usr/bin/setup.sh", results[0])
+	assert.Equal(t, "/usr/bin/myapp --config /etc/myapp.conf", results[1])
+	assert.Equal(t, "/usr/bin/myapp --secondary", results[2])
+}
+
+func TestExecute_ArrayIter_SelectTest_Match(t *testing.T) {
+	opts := dialect.ProfileGeneric.LoadOptions()
+	opts.AllowShadows = true
+
+	f, err := parser.ParseWithOptions("../../testdata/generic/duplicate_keys.ini", opts)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.ExecStart[] | select(test("setup"))`)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "/usr/bin/setup.sh", results[0])
+}
+
+func TestExecute_ArrayIter_SelectTest_NoMatch(t *testing.T) {
+	opts := dialect.ProfileGeneric.LoadOptions()
+	opts.AllowShadows = true
+
+	f, err := parser.ParseWithOptions("../../testdata/generic/duplicate_keys.ini", opts)
+	require.NoError(t, err)
+
+	results, err := query.Execute(f, `.service.ExecStart[] | select(test("nomatch"))`)
+	assert.NoError(t, err)
+	assert.Nil(t, results)
+}
+
+func TestExecute_ArrayIter_OnScalar_ReturnsError(t *testing.T) {
+	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
+	require.NoError(t, err)
+
+	_, err = query.Execute(f, ".database.host[]")
+	require.Error(t, err)
+}
+
 func TestExecute_DuplicateKeys(t *testing.T) {
 	opts := dialect.ProfileGeneric.LoadOptions()
 	opts.AllowShadows = true
