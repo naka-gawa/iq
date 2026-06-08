@@ -306,8 +306,6 @@ func TestE2E_RawStrings_PortAsString(t *testing.T) {
 	assert.Contains(t, stdout, `"5432"`)
 }
 
-// --- Issue #47: select() and test() E2E ---
-
 func TestE2E_Filter_SelectTest_Match(t *testing.T) {
 	path := copyFixture(t, "filter.ini")
 	stdout, _, exitCode := iq(t, `.service.exec | select(test("pre-start"))`, path)
@@ -337,9 +335,8 @@ func TestE2E_Filter_Test_InvalidRegex_ExitsOne(t *testing.T) {
 	assert.Contains(t, stderr, "ERROR:")
 }
 
-// --- Issue #48: array iteration ([]) E2E ---
-// Tests use keys[] which does not require AllowShadows.
-// Duplicate-key ExecStart[] tests are deferred until --profile (#53) is wired.
+// keys[] is used here because AllowShadows is not yet exposed as a CLI flag.
+// Duplicate-key ExecStart[] E2E tests will be added when --profile (#53) is wired.
 
 func TestE2E_ArrayIter_Keys(t *testing.T) {
 	stdout, _, exitCode := iq(t, ".database | keys[]", filepath.Join(testdataDir, "basic.ini"))

@@ -154,8 +154,6 @@ func TestFormatValue_Slice(t *testing.T) {
 	assert.JSONEq(t, `["a","b"]`, s)
 }
 
-// --- Issue #46: empty-result semantics ---
-
 func TestExecute_Select_MatchingValue(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
@@ -184,8 +182,6 @@ func TestExecute_MissingKey_ThenSelect_ReturnsNilNil(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Nil(t, results)
 }
-
-// --- Issue #47: select() and test() unit tests ---
 
 func TestExecute_Filter_Select_Match(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
@@ -252,8 +248,6 @@ func TestExecute_Filter_Test_InvalidRegex(t *testing.T) {
 	_, err = query.Execute(f, `.service.name | test("[invalid")`)
 	require.Error(t, err)
 }
-
-// --- Issue #48: array iteration ([]) unit tests ---
 
 func TestExecute_ArrayIter_DuplicateKeys(t *testing.T) {
 	opts := dialect.ProfileGeneric.LoadOptions()
