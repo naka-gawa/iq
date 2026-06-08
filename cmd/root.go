@@ -32,6 +32,7 @@ func NewRootCommand() *cobra.Command {
 		Short:        "iq is an INI query tool",
 		Long:         `iq is a fast and flexible CLI tool for parsing INI files.`,
 		SilenceUsage: true,
+		Args:         cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
 				return cmd.Help()
@@ -74,7 +75,7 @@ func newVersionCommand() *cobra.Command {
 		Use:   "version",
 		Short: "Print the version number of iq",
 		Run: func(cmd *cobra.Command, args []string) {
-			cmd.Printf("iq version %s, revision %s\n", version, revision)
+			fmt.Fprintf(cmd.OutOrStdout(), "iq version %s, revision %s\n", version, revision)
 		},
 	}
 }
