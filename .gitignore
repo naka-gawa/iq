@@ -54,3 +54,4 @@ shared/repos/*
 .tmp
 dist/
 
+CLAUDE.md
