@@ -1,0 +1,13 @@
+# Application configuration
+; This file is managed by iq
+[database]
+# Primary database connection
+; change in production
+host = localhost
+port = 5432
+
+; Cache settings
+[cache]
+host = 127.0.0.1
+# seconds
+ttl  = 300
