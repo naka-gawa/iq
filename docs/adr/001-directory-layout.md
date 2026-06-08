@@ -14,37 +14,47 @@ Both conventions carry costs when misapplied. This ADR records the policy for `i
 
 ## Decision
 
-### Default: flat layout at the module root
+### `internal/` serves two distinct roles — distinguish them
 
-For a small-to-medium Go project, placing packages directly under the module root (`iq/parser`, `iq/query`, …) keeps import paths short and reduces cognitive overhead. There is no structural reason to nest packages inside a prefix directory unless that prefix carries explicit meaning enforced by the toolchain.
+`internal/` can be used for two different reasons, and conflating them leads to confusion:
 
-### Use `internal/` only when there is a concrete reason
+**Role 1 — structural grouping**: keeps implementation packages out of the module root, making the top-level directory easier to navigate. This is a legitimate reason on its own: `internal/` is the only Go-toolchain-recognised grouping prefix that does not require semantic justification for each package it contains. Alternatives like `src/` (a GOPATH-era relic, non-standard in modules) or `utils/` (semantically vacuous, same problem as `pkg/`) are worse choices.
 
-`internal/` is appropriate when a package is an implementation detail that must not be importable by external modules. The bar is:
+**Role 2 — compiler-enforced access control**: prevents any external module from importing the packages. This is the intended Go language feature, and it is a meaningful constraint — but only when there is something to distinguish. If every package in the module is under `internal/`, the constraint applies uniformly and carries no signal about _which_ packages are especially sensitive.
 
-> "If an external module imported this package, would that create a coupling we are unwilling to support?"
+The correct question before adding a new package to `internal/` is:
 
-If the answer is yes, `internal/` is the right choice. If the answer is "I'm not sure" or "maybe someday", it is not. Moving a package into `internal/` later costs nothing; moving it out requires renaming every import path.
-
-Reasons that do **not** justify `internal/`:
-
-- "It feels private" — visibility without compiler enforcement is just convention; use unexported identifiers instead
-- "We might want to hide it in the future" — apply constraints when they are needed, not in advance
-- "Everyone else does it" — cargo-culting a pattern does not make it correct for this codebase
+> "Am I using `internal/` for structural grouping, compiler enforcement, or both — and is either reason applicable here?"
 
 ### Why the current `iq` packages are in `internal/`
 
-`iq` is a single-binary CLI tool. It is not intended to be an importable library. Every package under `internal/` is an implementation detail of the binary with no external-import contract. This satisfies the concrete-reason bar above: the answer to "should external modules import `iq/parser`?" is an unambiguous no.
+Both roles apply:
 
-This placement is justified **because `iq` is a CLI tool**, not because `internal/` is the default for all new packages. Future packages added to `iq` should go through the same reasoning — they do not inherit `internal/` placement automatically.
+1. **Structural grouping**: `iq` has seven implementation packages. Placing them all at the module root would clutter the top-level directory alongside `cmd/`, `docs/`, `testdata/`, and `main.go`. `internal/` provides a clean separation without inventing a meaningless prefix name.
+
+2. **Compiler enforcement**: `iq` is a single-binary CLI tool. It is not intended to be used as an importable library. The packages under `internal/` are implementation details of the binary with no external-import contract. Compiler enforcement reinforces this, even if the realistic probability of an accidental external import is low.
+
+### Why not `pkg/`, `src/`, or `utils/`
+
+| Option | Problem |
+|--------|---------|
+| `pkg/` | No official Go backing; adds path depth without meaning |
+| `src/` | Belongs to the GOPATH workspace layout, not Go modules; confuses tooling expectations |
+| `utils/` | Semantically empty; says nothing about the packages it contains |
+
+`internal/` is the only prefix that is recognised by the Go toolchain and carries an enforced constraint. For structural grouping, it is therefore the best available option even when compiler enforcement is not the primary motivation.
+
+### Default: flat layout at the module root
+
+For projects with only a small number of packages, flat layout at the module root is often the right choice. There is no reason to introduce `internal/` just because a package "feels private". The default should be flat; `internal/` should be introduced when either structural grouping or compiler enforcement (or both) provides concrete benefit.
 
 ### `pkg/` is prohibited
 
-`pkg/` adds path depth (`iq/pkg/foo` vs `iq/foo`) without conveying meaning beyond "this is a package", which is self-evident. It is not recommended by the Go team. A CI check in `.github/workflows/pr.yaml` enforces its absence on every pull request.
+`pkg/` adds path depth without conveying meaning. It is not recommended by the Go team. A CI check in `.github/workflows/pr.yaml` enforces its absence on every pull request.
 
 ## Consequences
 
-- When adding a new package, apply the decision criterion above explicitly. Do not default to `internal/`.
+- When adding a new package, ask which role(s) of `internal/` apply. If neither does, use flat layout.
 - `pkg/` is blocked by CI.
 - If `iq` ever gains a public library API, affected packages should be moved out of `internal/` at that time. This ADR should be revised to reflect the updated scope.
 
@@ -52,6 +62,8 @@ This placement is justified **because `iq` is a CLI tool**, not because `interna
 
 | Situation | Placement |
 |-----------|-----------|
-| Package is a `iq` binary implementation detail; external import would be undesirable | `internal/<name>/` |
-| Package is intended to be imported by external modules | module root (`iq/<name>/`) |
+| Small number of packages; root stays uncluttered | Module root (`iq/<name>/`) |
+| Many packages; `internal/` keeps root navigable | `internal/<name>/` |
+| Package must not be importable by external modules | `internal/<name>/` |
 | `pkg/` prefix considered | Not allowed |
+| `src/` or `utils/` prefix considered | Not allowed |
