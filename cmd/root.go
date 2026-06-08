@@ -10,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"iq/internal/dialect"
-	iqerr "iq/internal/errors"
 	"iq/internal/mutation"
 	"iq/internal/parser"
 	"iq/internal/query"
@@ -119,19 +118,19 @@ func newVersionCommand() *cobra.Command {
 // dispatch routes a parsed request to the correct pipeline stage.
 func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive bool, outputFmt string, rawStrings bool) error {
 	if interactive && isInPlace {
-		return fmt.Errorf("--interactive and --in-place cannot be used together: %w", iqerr.ErrPathInvalid)
+		return fmt.Errorf("--interactive and --in-place cannot be used together")
 	}
 	if interactive {
 		if filePath == "" {
-			return fmt.Errorf("--interactive requires a file argument: %w", iqerr.ErrPathInvalid)
+			return fmt.Errorf("--interactive requires a file argument")
 		}
 		f, err := parser.Parse(filePath, dialect.ProfileGeneric)
 		if err != nil {
-			return err
+			return fmt.Errorf("parsing file for interactive mode: %w", err)
 		}
 		chosen, err := tui.Run(f, filePath)
 		if err != nil {
-			return err
+			return fmt.Errorf("running interactive query: %w", err)
 		}
 		if chosen != "" {
 			fmt.Fprintln(cmd.OutOrStdout(), chosen)

@@ -46,82 +46,94 @@ func TestNew_SatisfiesTeaModel(t *testing.T) {
 
 // --- #50: live preview + keyboard controls ---
 
-func TestUpdate_EmptyQuery_ShowsFullINI(t *testing.T) {
-	f := loadFixture(t, "basic.ini")
-	m := tui.New(f, "basic.ini")
-
-	view := m.View()
-	assert.Contains(t, view, "database", "empty query must render full INI in preview")
-	assert.Contains(t, view, "> ", "input prompt must be present")
-}
-
-func TestUpdate_Keystroke_LiveEval(t *testing.T) {
-	f := loadFixture(t, "basic.ini")
-	m := tui.New(f, "basic.ini")
-
-	for _, r := range ".database.host" {
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		m = updated.(tui.Model)
+func TestUpdate_QueryEvaluation(t *testing.T) {
+	tests := []struct {
+		name            string
+		inputRunes      string
+		expectInView    []string
+		expectNotInView []string
+	}{
+		{
+			name:         "empty query shows full INI",
+			inputRunes:   "",
+			expectInView: []string{"database", "> "},
+		},
+		{
+			name:         "valid query shows result",
+			inputRunes:   ".database.host",
+			expectInView: []string{"localhost"},
+		},
+		{
+			name:            "invalid expression shows no ANSI and no valid result",
+			inputRunes:      "{{bad}}",
+			expectNotInView: []string{"\x1b[", "localhost"},
+		},
 	}
 
-	view := m.View()
-	assert.Contains(t, view, "localhost", "live eval must show query result")
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := loadFixture(t, "basic.ini")
+			m := tui.New(f, "basic.ini")
 
-func TestUpdate_InvalidExpr_ShowsError(t *testing.T) {
-	f := loadFixture(t, "basic.ini")
-	m := tui.New(f, "basic.ini")
+			for _, r := range tt.inputRunes {
+				updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				m = updated.(tui.Model)
+			}
 
-	for _, r := range "{{bad}}" {
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		m = updated.(tui.Model)
+			view := m.View()
+			for _, want := range tt.expectInView {
+				assert.Contains(t, view, want)
+			}
+			for _, notWant := range tt.expectNotInView {
+				assert.NotContains(t, view, notWant)
+			}
+		})
 	}
-
-	view := m.View()
-	assert.NotContains(t, view, "\x1b[", "no ANSI codes in error view")
-	// Error message should appear in the preview pane (not on stderr).
-	// The view must not show a valid result.
-	assert.NotContains(t, view, "localhost")
 }
 
 // --- #51: Enter / Esc integration ---
 
-func TestUpdate_Enter_SetsChosen(t *testing.T) {
-	f := loadFixture(t, "basic.ini")
-	m := tui.New(f, "basic.ini")
-
-	for _, r := range ".database.host" {
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		m = updated.(tui.Model)
+func TestUpdate_KeyboardControls(t *testing.T) {
+	tests := []struct {
+		name           string
+		inputRunes     string
+		terminationKey tea.KeyType
+		expectChosen   string
+	}{
+		{
+			name:           "Enter commits query",
+			inputRunes:     ".database.host",
+			terminationKey: tea.KeyEnter,
+			expectChosen:   ".database.host",
+		},
+		{
+			name:           "Esc clears chosen",
+			inputRunes:     ".database.host",
+			terminationKey: tea.KeyEsc,
+			expectChosen:   "",
+		},
+		{
+			name:           "Ctrl+C clears chosen",
+			inputRunes:     "",
+			terminationKey: tea.KeyCtrlC,
+			expectChosen:   "",
+		},
 	}
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	final := updated.(tui.Model)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f := loadFixture(t, "basic.ini")
+			m := tui.New(f, "basic.ini")
 
-	assert.Equal(t, ".database.host", final.Chosen())
-}
+			for _, r := range tt.inputRunes {
+				updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+				m = updated.(tui.Model)
+			}
 
-func TestUpdate_Esc_ChosenEmpty(t *testing.T) {
-	f := loadFixture(t, "basic.ini")
-	m := tui.New(f, "basic.ini")
+			updated, _ := m.Update(tea.KeyMsg{Type: tt.terminationKey})
+			final := updated.(tui.Model)
 
-	for _, r := range ".database.host" {
-		updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
-		m = updated.(tui.Model)
+			assert.Equal(t, tt.expectChosen, final.Chosen())
+		})
 	}
-
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	final := updated.(tui.Model)
-
-	assert.Empty(t, final.Chosen())
-}
-
-func TestUpdate_CtrlC_ChosenEmpty(t *testing.T) {
-	f := loadFixture(t, "basic.ini")
-	m := tui.New(f, "basic.ini")
-
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-	final := updated.(tui.Model)
-
-	assert.Empty(t, final.Chosen())
 }
