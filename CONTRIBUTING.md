@@ -13,7 +13,7 @@ See [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md).
 
 See [docs/adr/001-directory-layout.md](docs/adr/001-directory-layout.md) for the full rationale.
 
-- New packages go under `internal/` only when there is a concrete reason to prevent external import; otherwise place them at the module root
+- New packages go under `internal/` for structural grouping (keeping root clean) or to prevent external import; otherwise place them at the module root
 - `pkg/` is prohibited — a CI check enforces this on every PR
 - Do not move packages out of `internal/` without a corresponding ADR update
 
