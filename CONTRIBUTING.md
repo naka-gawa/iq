@@ -9,6 +9,14 @@
 
 See [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md).
 
+## Directory Layout
+
+See [docs/adr/001-directory-layout.md](docs/adr/001-directory-layout.md) for the full rationale.
+
+- New packages go under `internal/<responsibility>/` (e.g., `internal/store/`, `internal/config/`)
+- `pkg/` is prohibited — a CI check enforces this on every PR
+- Do not move packages out of `internal/` without a corresponding ADR update
+
 ## Workflow
 
 1. Fork the repository and create a branch from `main`.
@@ -24,6 +32,7 @@ See [docs/dev/DEVELOPMENT.md](docs/dev/DEVELOPMENT.md).
 - [ ] New behavior has test coverage
 - [ ] Comment preservation is not broken (run the critical test scenarios from TESTING.md)
 - [ ] If a new dialect is added, a fixture file and detection test exist
+- [ ] No `pkg/` directory introduced (CI enforces this)
 
 ## Commit Message Format
 
