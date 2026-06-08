@@ -1,0 +1,14 @@
+[Unit]
+Description=My Application
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/myapp --first \
+  --config /etc/myapp.conf
+ExecStart=/usr/bin/myapp --second
+Restart=on-failure
+ExecCondition=/bin/true ; inline semicolon stays in value
+
+[Install]
+WantedBy=multi-user.target

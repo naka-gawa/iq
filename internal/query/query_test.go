@@ -17,7 +17,7 @@ func TestExecute_StringValue(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, ".database.host")
+	results, err := query.Execute(f, ".database.host", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "localhost", results[0])
@@ -27,7 +27,7 @@ func TestExecute_SectionExtraction(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, ".database")
+	results, err := query.Execute(f, ".database", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -41,7 +41,7 @@ func TestExecute_RootExtraction(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, ".")
+	results, err := query.Execute(f, ".", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -55,7 +55,7 @@ func TestExecute_MissingKey_ReturnsErrKeyNotFound(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	_, err = query.Execute(f, ".database.nonexistent")
+	_, err = query.Execute(f, ".database.nonexistent", nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, iqerr.ErrKeyNotFound))
 }
@@ -64,7 +64,7 @@ func TestExecute_MissingSection_ReturnsErrKeyNotFound(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	_, err = query.Execute(f, ".nosuchsection.key")
+	_, err = query.Execute(f, ".nosuchsection.key", nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, iqerr.ErrKeyNotFound))
 }
@@ -73,7 +73,7 @@ func TestExecute_InvalidExpression_ReturnsErrPathInvalid(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	_, err = query.Execute(f, "{{invalid}}")
+	_, err = query.Execute(f, "{{invalid}}", nil)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, iqerr.ErrPathInvalid))
 }
@@ -84,7 +84,7 @@ func TestExecute_Strenv(t *testing.T) {
 
 	t.Setenv("TEST_IQ_VAR", "injected_value")
 
-	results, err := query.Execute(f, `strenv("TEST_IQ_VAR")`)
+	results, err := query.Execute(f, `strenv("TEST_IQ_VAR")`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "injected_value", results[0])
@@ -94,7 +94,7 @@ func TestExecute_BracketNotation(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/special_chars.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.["`+`my section`+`"]["`+`host-name`+`"]`)
+	results, err := query.Execute(f, `.["`+`my section`+`"]["`+`host-name`+`"]`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "example.com", results[0])
@@ -104,7 +104,7 @@ func TestExecute_GlobalProperties(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/global_properties.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, ".version")
+	results, err := query.Execute(f, ".version", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "1.0.0", results[0])
@@ -114,7 +114,7 @@ func TestExecute_PipeKeys(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, ".database | keys")
+	results, err := query.Execute(f, ".database | keys", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 
@@ -158,7 +158,7 @@ func TestExecute_Select_MatchingValue(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.database.host | select(. == "localhost")`)
+	results, err := query.Execute(f, `.database.host | select(. == "localhost")`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "localhost", results[0])
@@ -168,7 +168,7 @@ func TestExecute_Select_NoMatch_ReturnsNilNil(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.database.host | select(. == "other")`)
+	results, err := query.Execute(f, `.database.host | select(. == "other")`, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -178,7 +178,7 @@ func TestExecute_MissingKey_ThenSelect_ReturnsNilNil(t *testing.T) {
 	require.NoError(t, err)
 
 	// select filters out the null produced by the missing key — empty set, not not-found.
-	results, err := query.Execute(f, `.database.nonexistent | select(. != null)`)
+	results, err := query.Execute(f, `.database.nonexistent | select(. != null)`, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -187,7 +187,7 @@ func TestExecute_Filter_Select_Match(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.name | select(. == "auth-service")`)
+	results, err := query.Execute(f, `.service.name | select(. == "auth-service")`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "auth-service", results[0])
@@ -197,7 +197,7 @@ func TestExecute_Filter_Select_NoMatch(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.name | select(. == "other")`)
+	results, err := query.Execute(f, `.service.name | select(. == "other")`, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -206,7 +206,7 @@ func TestExecute_Filter_Test_Match(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.name | test("auth")`)
+	results, err := query.Execute(f, `.service.name | test("auth")`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, true, results[0])
@@ -216,7 +216,7 @@ func TestExecute_Filter_Test_NoMatch(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.name | test("xyz")`)
+	results, err := query.Execute(f, `.service.name | test("xyz")`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, false, results[0])
@@ -226,7 +226,7 @@ func TestExecute_Filter_SelectTest_Match(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.exec | select(test("pre-start"))`)
+	results, err := query.Execute(f, `.service.exec | select(test("pre-start"))`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "/usr/bin/pre-start.sh", results[0])
@@ -236,7 +236,7 @@ func TestExecute_Filter_SelectTest_NoMatch(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.exec | select(test("nomatch"))`)
+	results, err := query.Execute(f, `.service.exec | select(test("nomatch"))`, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -245,7 +245,7 @@ func TestExecute_Filter_Test_InvalidRegex(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/filter.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	_, err = query.Execute(f, `.service.name | test("[invalid")`)
+	_, err = query.Execute(f, `.service.name | test("[invalid")`, nil)
 	require.Error(t, err)
 }
 
@@ -256,7 +256,7 @@ func TestExecute_ArrayIter_DuplicateKeys(t *testing.T) {
 	f, err := parser.ParseWithOptions("../../testdata/generic/duplicate_keys.ini", opts)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, ".service.ExecStart[]")
+	results, err := query.Execute(f, ".service.ExecStart[]", nil)
 	require.NoError(t, err)
 	assert.Len(t, results, 3)
 	assert.Equal(t, "/usr/bin/setup.sh", results[0])
@@ -271,7 +271,7 @@ func TestExecute_ArrayIter_SelectTest_Match(t *testing.T) {
 	f, err := parser.ParseWithOptions("../../testdata/generic/duplicate_keys.ini", opts)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.ExecStart[] | select(test("setup"))`)
+	results, err := query.Execute(f, `.service.ExecStart[] | select(test("setup"))`, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	assert.Equal(t, "/usr/bin/setup.sh", results[0])
@@ -284,7 +284,7 @@ func TestExecute_ArrayIter_SelectTest_NoMatch(t *testing.T) {
 	f, err := parser.ParseWithOptions("../../testdata/generic/duplicate_keys.ini", opts)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, `.service.ExecStart[] | select(test("nomatch"))`)
+	results, err := query.Execute(f, `.service.ExecStart[] | select(test("nomatch"))`, nil)
 	assert.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -293,7 +293,7 @@ func TestExecute_ArrayIter_OnScalar_ReturnsError(t *testing.T) {
 	f, err := parser.Parse("../../testdata/generic/basic.ini", dialect.ProfileGeneric)
 	require.NoError(t, err)
 
-	_, err = query.Execute(f, ".database.host[]")
+	_, err = query.Execute(f, ".database.host[]", nil)
 	require.Error(t, err)
 }
 
@@ -304,7 +304,7 @@ func TestExecute_DuplicateKeys(t *testing.T) {
 	f, err := parser.ParseWithOptions("../../testdata/generic/duplicate_keys.ini", opts)
 	require.NoError(t, err)
 
-	results, err := query.Execute(f, ".service.ExecStart")
+	results, err := query.Execute(f, ".service.ExecStart", nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 

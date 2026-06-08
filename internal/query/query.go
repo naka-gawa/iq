@@ -15,7 +15,9 @@ import (
 // Execute runs a jq expression against the INI AST and returns matched values.
 // Returns ErrKeyNotFound (wrapped) when the expression yields no results.
 // Returns ErrPathInvalid (wrapped) when the expression cannot be parsed or compiled.
-func Execute(f *ini.File, expr string) ([]any, error) {
+// If transform is non-nil it is applied to the intermediate map before jq evaluation,
+// enabling dialect-specific restructuring (e.g. gitconfig subsection expansion).
+func Execute(f *ini.File, expr string, transform func(map[string]any) map[string]any) ([]any, error) {
 	q, err := gojq.Parse(expr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid expression %q: %w", expr, iqerr.ErrPathInvalid)
@@ -35,6 +37,9 @@ func Execute(f *ini.File, expr string) ([]any, error) {
 	}
 
 	m := toMap(f)
+	if transform != nil {
+		m = transform(m)
+	}
 	iter := code.Run(m)
 
 	var results []any
