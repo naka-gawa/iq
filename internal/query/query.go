@@ -38,6 +38,7 @@ func Execute(f *ini.File, expr string) ([]any, error) {
 	iter := code.Run(m)
 
 	var results []any
+	var sawNull bool
 	for {
 		v, ok := iter.Next()
 		if !ok {
@@ -46,13 +47,18 @@ func Execute(f *ini.File, expr string) ([]any, error) {
 		if e, ok := v.(error); ok {
 			return nil, fmt.Errorf("query error: %w", e)
 		}
-		// jq returns null for missing keys; treat as not-found in iq.
-		if v != nil {
-			results = append(results, v)
+		// jq yields null when a path does not exist. Track this separately from a
+		// filter expression that matched nothing (which yields no values at all).
+		if v == nil {
+			sawNull = true
+			continue
 		}
+		results = append(results, v)
 	}
 
-	if len(results) == 0 {
+	// null yielded → path was evaluated and resolved to null → key not found.
+	// no values and no null → filter (select/test/[]) returned empty set → exit 0.
+	if len(results) == 0 && sawNull {
 		return nil, fmt.Errorf("path not found: %w", iqerr.ErrKeyNotFound)
 	}
 
