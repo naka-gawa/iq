@@ -104,8 +104,8 @@ iq '.Service.ExecStart | select(test("pre-start"))' service.service
 | `--in-place` | `-i` | `false` | Write mutations back to the original file |
 | `--output` | `-o` | `ini` | Output format: `ini` or `json` |
 | `--raw-strings` | — | `false` | Disable JSON type coercion (all values as strings) |
-| `--profile` | — | `generic` | Dialect profile *(planned; currently accepted but not applied)* |
-| `--ignore-case` | — | `false` | Case-insensitive key matching *(planned; currently accepted but not applied)* |
+| `--profile` | — | `generic` | Dialect profile: `generic`, `systemd`, `gitconfig` (auto-detected from file extension when omitted) |
+| `--ignore-case` | — | `false` | Case-insensitive key and section matching |
 
 ## Prerequisites / Environment
 
@@ -161,7 +161,7 @@ Comments and structure are preserved exactly.
 | `1` | General error (parse failure, bad path, permission denied) |
 | `2` | Key or section not found |
 
-**Dialect profiles** are planned for handling INI variants (systemd units, gitconfig). Currently only `generic` is active; `systemd` and `gitconfig` auto-detection is not yet implemented.
+**Dialect profiles** handle INI variants automatically. `systemd` is detected from `.service`, `.target`, `.socket`, `.mount`, `.timer`, `.path`, `.scope`, `.slice` extensions; `gitconfig` is detected from `.gitconfig` filenames and `.git/config` paths. Override with `--profile`.
 
 **Interactive TUI** (`--interactive` / `-I`) is planned and not yet implemented.
 
