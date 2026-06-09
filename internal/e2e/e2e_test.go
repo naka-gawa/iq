@@ -4,6 +4,7 @@ package e2e_test
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -56,7 +57,14 @@ func TestMain(m *testing.M) {
 // iq runs the binary with the given arguments and returns stdout, stderr, and exit code.
 func iq(t *testing.T, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
+	return iqWithStdin(t, nil, args...)
+}
+
+// iqWithStdin runs the binary with the given stdin reader and arguments.
+func iqWithStdin(t *testing.T, stdin io.Reader, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
 	cmd := exec.Command(binaryPath, args...)
+	cmd.Stdin = stdin
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -505,4 +513,29 @@ func TestE2E_ArrayIter_Keys_SelectNoMatch_ExitsZero(t *testing.T) {
 	stdout, _, exitCode := iq(t, `.database | keys[] | select(test("zzz"))`, filepath.Join(testdataDir, "basic.ini"))
 	assert.Equal(t, 0, exitCode)
 	assert.Empty(t, stdout)
+}
+
+// --- Scenario: interactive mode stdin handling (#66, #67) ---
+
+func TestE2E_Interactive_NoFile_NoStdin_ReturnsError(t *testing.T) {
+	// No file argument and stdin is not a pipe (exec.Command defaults to /dev/null,
+	// which is a char device → treated as non-pipe TTY). Must return exit 1 with a
+	// message directing the user to provide a file or pipe INI data.
+	_, stderr, exitCode := iq(t, "-I")
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, stderr, "ERROR:")
+}
+
+func TestE2E_Interactive_PipedStdin_NoTTY_ReturnsError(t *testing.T) {
+	// Pipe INI content via stdin while /dev/tty is unavailable (typical in CI).
+	// Expected: exit 1 with a message about /dev/tty.
+	// If /dev/tty IS available (developer workstation with TTY), bubbletea would
+	// actually launch; skip in that environment to avoid hanging.
+	if _, err := os.Open("/dev/tty"); err == nil {
+		t.Skip("/dev/tty available; skipping pipe+no-tty error test")
+	}
+	r := strings.NewReader("[database]\nhost = localhost\n")
+	_, stderr, exitCode := iqWithStdin(t, r, "-I")
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, stderr, "ERROR:")
 }

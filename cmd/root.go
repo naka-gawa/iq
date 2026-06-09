@@ -132,14 +132,28 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 	}
 
 	if interactive {
-		if filePath == "" {
-			return fmt.Errorf("--interactive requires a file argument")
+		var tuiOpts []tui.Option
+		if filePath == "" || filePath == "-" {
+			// No file argument: INI data must come from a stdin pipe.
+			// Reject early if stdin is a TTY (interactive terminal) because there
+			// is no piped data and opening /dev/tty would just duplicate stdin.
+			fi, statErr := os.Stdin.Stat()
+			if statErr == nil && (fi.Mode()&os.ModeCharDevice) != 0 {
+				return fmt.Errorf("--interactive requires a file argument or piped INI data (e.g. cat config.ini | iq -I)")
+			}
+			// Data arrived via stdin pipe; open /dev/tty for bubbletea keyboard events.
+			tty, ttyErr := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+			if ttyErr != nil {
+				return fmt.Errorf("interactive mode requires a TTY (stdin is a pipe and /dev/tty is unavailable): %w", ttyErr)
+			}
+			defer tty.Close()
+			tuiOpts = append(tuiOpts, tui.WithInput(tty))
 		}
 		f, err := parser.ParseWithOptions(filePath, opts)
 		if err != nil {
 			return fmt.Errorf("parsing file for interactive mode: %w", err)
 		}
-		chosen, err := tui.Run(f, filePath)
+		chosen, err := tui.Run(f, filePath, tuiOpts...)
 		if err != nil {
 			return fmt.Errorf("running interactive query: %w", err)
 		}

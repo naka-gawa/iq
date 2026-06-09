@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"io"
 	"strings"
 
 	"charm.land/bubbles/v2/textinput"
@@ -10,6 +11,20 @@ import (
 
 	"iq/internal/query"
 )
+
+// Option configures the bubbletea program created by Run.
+type Option func(*options)
+
+type options struct {
+	input io.Reader
+}
+
+// WithInput redirects bubbletea keyboard input to r instead of os.Stdin.
+// Use this when stdin carries data (e.g. a pipe) and the keyboard must be
+// read from /dev/tty or another source.
+func WithInput(r io.Reader) Option {
+	return func(o *options) { o.input = r }
+}
 
 // Model is the bubbletea model for the interactive TUI.
 type Model struct {
@@ -76,9 +91,18 @@ func (m Model) View() tea.View {
 
 // Run starts the bubbletea program and returns the chosen query string.
 // Returns an empty string when the user exits without committing (Esc/Ctrl+C).
-func Run(f *ini.File, filePath string) (string, error) {
+func Run(f *ini.File, filePath string, opts ...Option) (string, error) {
+	cfg := &options{}
+	for _, o := range opts {
+		o(cfg)
+	}
+
 	m := New(f, filePath)
-	p := tea.NewProgram(m)
+	var progOpts []tea.ProgramOption
+	if cfg.input != nil {
+		progOpts = append(progOpts, tea.WithInput(cfg.input))
+	}
+	p := tea.NewProgram(m, progOpts...)
 	final, err := p.Run()
 	if err != nil {
 		return "", err
