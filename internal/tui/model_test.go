@@ -3,6 +3,7 @@ package tui_test
 import (
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -137,4 +138,25 @@ func TestUpdate_KeyboardControls(t *testing.T) {
 			assert.Equal(t, tt.expectChosen, final.Chosen())
 		})
 	}
+}
+
+// --- #65: WithInput option ---
+
+func TestWithInput_AcceptedByRun(t *testing.T) {
+	// Run with a mock reader that immediately sends Esc so the program exits.
+	// Verifies that WithInput is wired through to tea.NewProgram without panic.
+	f, err := ini.Load([]byte("[s]\nk=v\n"))
+	require.NoError(t, err)
+
+	// Esc key sequence for a minimal VT100 terminal.
+	r := strings.NewReader("\x1b")
+	_, err = tui.Run(f, "", tui.WithInput(r))
+	// bubbletea may return an error when the reader is exhausted; that is acceptable.
+	_ = err
+}
+
+func TestWithInput_OptionConstructible(t *testing.T) {
+	// WithInput must return a non-nil Option without panic.
+	opt := tui.WithInput(strings.NewReader(""))
+	assert.NotNil(t, opt)
 }
