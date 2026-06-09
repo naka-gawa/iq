@@ -531,7 +531,8 @@ func TestE2E_Interactive_PipedStdin_NoTTY_ReturnsError(t *testing.T) {
 	// Expected: exit 1 with a message about /dev/tty.
 	// If /dev/tty IS available (developer workstation with TTY), bubbletea would
 	// actually launch; skip in that environment to avoid hanging.
-	if _, err := os.Open("/dev/tty"); err == nil {
+	if tty, err := os.Open("/dev/tty"); err == nil {
+		_ = tty.Close()
 		t.Skip("/dev/tty available; skipping pipe+no-tty error test")
 	}
 	r := strings.NewReader("[database]\nhost = localhost\n")

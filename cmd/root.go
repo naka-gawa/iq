@@ -138,7 +138,10 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 			// Reject early if stdin is a TTY (interactive terminal) because there
 			// is no piped data and opening /dev/tty would just duplicate stdin.
 			fi, statErr := os.Stdin.Stat()
-			if statErr == nil && (fi.Mode()&os.ModeCharDevice) != 0 {
+			if statErr != nil {
+				return fmt.Errorf("checking stdin mode for interactive input: %w", statErr)
+			}
+			if (fi.Mode() & os.ModeCharDevice) != 0 {
 				return fmt.Errorf("--interactive requires a file argument or piped INI data (e.g. cat config.ini | iq -I)")
 			}
 			// Data arrived via stdin pipe; open /dev/tty for bubbletea keyboard events.
