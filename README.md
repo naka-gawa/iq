@@ -116,7 +116,7 @@ iq '.Service.ExecStart | select(test("pre-start"))' service.service
 | **INI backend** | [gopkg.in/ini.v1](https://github.com/go-ini/ini) v1.67.1 |
 | **jq evaluator** | [gojq](https://github.com/itchyny/gojq) v0.12.19 |
 | **Color output** | [fatih/color](https://github.com/fatih/color) v1.19.0 |
-| **TUI** | [bubbletea](https://github.com/charmbracelet/bubbletea) *(planned)* |
+| **TUI** | [bubbletea](https://github.com/charmbracelet/bubbletea) v2 |
 | **OS** | Linux, macOS (single static binary, no CGO) |
 
 Tool versions are pinned via [aqua](https://aquaproj.github.io/). Run `make init` to install them.
