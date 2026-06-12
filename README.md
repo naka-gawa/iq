@@ -97,11 +97,25 @@ iq '.database | keys' config.ini
 iq '.Service.ExecStart | select(test("pre-start"))' service.service
 ```
 
+### Interactive mode
+
+```bash
+# open a live query editor (type a jq expression, see results update in real time)
+iq --interactive config.ini
+iq -I config.ini
+
+# interactive over piped INI data (keyboard read from /dev/tty)
+cat config.ini | iq -I
+```
+
+Press Enter to print the final query to stdout; Esc or Ctrl+C exits without printing.
+
 ### Flags
 
 | Flag | Short | Default | Description |
 |---|---|---|---|
 | `--in-place` | `-i` | `false` | Write mutations back to the original file |
+| `--interactive` | `-I` | `false` | Launch interactive query mode (TUI with live jq preview) |
 | `--output` | `-o` | `ini` | Output format: `ini` or `json` |
 | `--raw-strings` | — | `false` | Disable JSON type coercion (all values as strings) |
 | `--profile` | — | `generic` | Dialect profile: `generic`, `systemd`, `gitconfig` (auto-detected from file extension when omitted) |
@@ -163,7 +177,7 @@ Comments and structure are preserved exactly.
 
 **Dialect profiles** handle INI variants automatically. `systemd` is detected from `.service`, `.target`, `.socket`, `.mount`, `.timer`, `.path`, `.scope`, `.slice` extensions; `gitconfig` is detected from `.gitconfig` filenames and `.git/config` paths. Override with `--profile`.
 
-**Interactive TUI** (`--interactive` / `-I`) is planned and not yet implemented.
+**Interactive TUI** (`--interactive` / `-I`) opens a live query editor: type a jq-style expression, watch the matching result update in real time, and press Enter to print the final query to stdout. Esc / Ctrl+C exits without printing. It works on a file argument or on piped INI data (`cat config.ini | iq -I`), in which case the keyboard is read from `/dev/tty`.
 
 **Color output** is TTY-aware and automatically disabled when piping or redirecting.
 
