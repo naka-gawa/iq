@@ -8,6 +8,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"gopkg.in/ini.v1"
 
 	"iq/internal/dialect"
 	"iq/internal/mutation"
@@ -132,38 +133,7 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 	}
 
 	if interactive {
-		var tuiOpts []tui.Option
-		if filePath == "" || filePath == "-" {
-			// No file argument: INI data must come from a stdin pipe.
-			// Reject early if stdin is a TTY (interactive terminal) because there
-			// is no piped data and opening /dev/tty would just duplicate stdin.
-			fi, statErr := os.Stdin.Stat()
-			if statErr != nil {
-				return fmt.Errorf("checking stdin mode for interactive input: %w", statErr)
-			}
-			if (fi.Mode() & os.ModeCharDevice) != 0 {
-				return fmt.Errorf("--interactive requires a file argument or piped INI data (e.g. cat config.ini | iq -I)")
-			}
-			// Data arrived via stdin pipe; open /dev/tty for bubbletea keyboard events.
-			tty, ttyErr := os.OpenFile("/dev/tty", os.O_RDWR, 0)
-			if ttyErr != nil {
-				return fmt.Errorf("interactive mode requires a TTY (stdin is a pipe and /dev/tty is unavailable): %w", ttyErr)
-			}
-			defer tty.Close()
-			tuiOpts = append(tuiOpts, tui.WithInput(tty))
-		}
-		f, err := parser.ParseWithOptions(filePath, opts)
-		if err != nil {
-			return fmt.Errorf("parsing file for interactive mode: %w", err)
-		}
-		chosen, err := tui.Run(f, filePath, tuiOpts...)
-		if err != nil {
-			return fmt.Errorf("running interactive query: %w", err)
-		}
-		if chosen != "" {
-			fmt.Fprintln(cmd.OutOrStdout(), chosen)
-		}
-		return nil
+		return runInteractive(cmd, filePath, opts)
 	}
 
 	f, err := parser.ParseWithOptions(filePath, opts)
@@ -180,7 +150,7 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 		if err := mutation.Apply(f, targets); err != nil {
 			return err
 		}
-		if filePath == "" || filePath == "-" {
+		if isStdinPath(filePath) {
 			// In-place on stdin is a no-op for stdout; write INI to stdout instead.
 			return serializer.WriteINI(f, cmd.OutOrStdout())
 		}
@@ -211,6 +181,45 @@ func dispatch(cmd *cobra.Command, expr, filePath string, isInPlace, interactive 
 	return nil
 }
 
+// runInteractive parses the INI source and launches the TUI query mode.
+// When no file argument is given, INI data is read from a stdin pipe and
+// keyboard events are routed through /dev/tty.
+func runInteractive(cmd *cobra.Command, filePath string, opts ini.LoadOptions) error {
+	var tuiOpts []tui.Option
+	if isStdinPath(filePath) {
+		// No file argument: INI data must come from a stdin pipe.
+		// Reject early if stdin is a TTY (interactive terminal) because there
+		// is no piped data and opening /dev/tty would just duplicate stdin.
+		fi, statErr := os.Stdin.Stat()
+		if statErr != nil {
+			return fmt.Errorf("checking stdin mode for interactive input: %w", statErr)
+		}
+		if (fi.Mode() & os.ModeCharDevice) != 0 {
+			return fmt.Errorf("--interactive requires a file argument or piped INI data (e.g. cat config.ini | iq -I)")
+		}
+		// Data arrived via stdin pipe; open /dev/tty for bubbletea keyboard events.
+		tty, ttyErr := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+		if ttyErr != nil {
+			return fmt.Errorf("interactive mode requires a TTY (stdin is a pipe and /dev/tty is unavailable): %w", ttyErr)
+		}
+		defer tty.Close()
+		tuiOpts = append(tuiOpts, tui.WithInput(tty))
+	}
+
+	f, err := parser.ParseWithOptions(filePath, opts)
+	if err != nil {
+		return fmt.Errorf("parsing file for interactive mode: %w", err)
+	}
+	chosen, err := tui.Run(f, filePath, tuiOpts...)
+	if err != nil {
+		return fmt.Errorf("running interactive query: %w", err)
+	}
+	if chosen != "" {
+		fmt.Fprintln(cmd.OutOrStdout(), chosen)
+	}
+	return nil
+}
+
 // resolveProfile returns the effective dialect profile for the given file path.
 // If --profile was explicitly set, it is parsed and used. Otherwise the profile
 // is auto-detected from the file path.
@@ -220,6 +229,12 @@ func resolveProfile(cmd *cobra.Command, filePath string) (dialect.Profile, error
 		return dialect.ParseProfile(profileFlag)
 	}
 	return dialect.Detect(filePath), nil
+}
+
+// isStdinPath reports whether filePath designates standard input.
+// An empty path or "-" both mean "read from stdin".
+func isStdinPath(filePath string) bool {
+	return filePath == "" || filePath == "-"
 }
 
 // isMutationExpr reports whether expr contains an assignment or deletion.
