@@ -10,6 +10,7 @@
 //	ErrPathInvalid     -> exit 1
 //	ErrFileParseFailed -> exit 1
 //	ErrDialectDetect   -> exit 1
+//	ErrMergeConflict   -> exit 1
 //
 // Callers should import this package with an alias to avoid collision
 // with the standard library errors package:
@@ -30,6 +31,8 @@ var (
 	ErrPathInvalid     = errors.New("invalid path expression")
 	ErrFileParseFailed = errors.New("failed to parse INI file")
 	ErrDialectDetect   = errors.New("failed to detect dialect")
+	// ErrMergeConflict is returned by --merge-strict when files disagree on a key.
+	ErrMergeConflict = errors.New("merge conflict")
 )
 
 // KeyNotFoundError unwraps to [ErrKeyNotFound].

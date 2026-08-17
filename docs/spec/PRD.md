@@ -166,18 +166,22 @@ Removes a key or an entire section.
 **Multi-file merge**
 
 ```bash
-iq eval-all '. as $item ireduce ({}; . * $item)' base.ini prod.ini
+iq eval-all base.ini prod.ini
 ```
 
-Merges `prod.ini` over `base.ini`. Keys in `prod.ini` overwrite their counterparts in `base.ini`; keys that exist only in `base.ini` are preserved.
+Deep-merges `prod.ini` over `base.ini`, section by section. Keys in `prod.ini` overwrite their counterparts in `base.ini`; keys that exist only in `base.ini` are preserved. Two or more files are required.
 
-**Merge conflict policies** (controlled by flag)
+The interface is flag-driven rather than requiring a jq reduce expression: `iq eval-all base.ini prod.ini` is the equivalent of the jq form `. as $item ireduce ({}; . * $item)`.
+
+Because a merge synthesizes a new document from multiple sources, comments from the input files are **not** carried into the output. Output defaults to INI and can be switched with `-o json`. Per-file dialect auto-detection and `--profile` / `--ignore-case` apply as they do for reads.
+
+**Merge conflict policies** (controlled by flag, mutually exclusive)
 
 | Flag | Behavior |
 |---|---|
 | `--merge-overwrite` (default) | Values in later files win |
-| `--merge-append` | Duplicate keys become an array (union) |
-| `--merge-strict` | Error on any conflicting key |
+| `--merge-append` | Conflicting keys become an array (union) |
+| `--merge-strict` | Error (exit 1) on any conflicting key |
 
 ---
 

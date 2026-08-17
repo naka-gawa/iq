@@ -540,3 +540,92 @@ func TestE2E_Interactive_PipedStdin_NoTTY_ReturnsError(t *testing.T) {
 	assert.Equal(t, 1, exitCode)
 	assert.Contains(t, stderr, "ERROR:")
 }
+
+// --- Scenario: eval-all multi-file merge (PRD 5.3) ---
+
+// writeTemp writes content to a uniquely named temp file with the given
+// extension and returns its path. Used to drive eval-all with real files.
+func writeTemp(t *testing.T, ext, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "iq-merge-*"+ext)
+	require.NoError(t, err)
+	_, err = f.WriteString(content)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return f.Name()
+}
+
+func TestE2E_EvalAll_Overwrite_LaterWins(t *testing.T) {
+	base := writeTemp(t, ".ini", "[database]\nhost = localhost\nport = 5432\n")
+	prod := writeTemp(t, ".ini", "[database]\nhost = prod.example.com\n")
+
+	stdout, _, exitCode := iq(t, "eval-all", base, prod)
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, "host = prod.example.com") // overwritten
+	assert.Contains(t, stdout, "port = 5432")             // preserved from base
+}
+
+func TestE2E_EvalAll_GlobalKeys_Merged(t *testing.T) {
+	a := writeTemp(t, ".ini", "global = a\n[s]\nk = 1\n")
+	b := writeTemp(t, ".ini", "other = b\n")
+
+	stdout, _, exitCode := iq(t, "eval-all", a, b)
+	assert.Equal(t, 0, exitCode)
+	assert.Regexp(t, `global\s*=\s*a`, stdout)
+	assert.Regexp(t, `other\s*=\s*b`, stdout)
+}
+
+func TestE2E_EvalAll_JSON_Coercion(t *testing.T) {
+	base := writeTemp(t, ".ini", "[database]\nport = 5432\n")
+	prod := writeTemp(t, ".ini", "[cache]\nttl = 60\n")
+
+	stdout, _, exitCode := iq(t, "eval-all", "-o", "json", base, prod)
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, `"port": 5432`)
+	assert.Contains(t, stdout, `"ttl": 60`)
+}
+
+func TestE2E_EvalAll_Append_UnionsValues(t *testing.T) {
+	base := writeTemp(t, ".ini", "[s]\nk = a\n")
+	prod := writeTemp(t, ".ini", "[s]\nk = b\n")
+
+	stdout, _, exitCode := iq(t, "eval-all", "--merge-append", base, prod)
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, "k = a")
+	assert.Contains(t, stdout, "k = b")
+}
+
+func TestE2E_EvalAll_Strict_ConflictExits1(t *testing.T) {
+	base := writeTemp(t, ".ini", "[s]\nk = a\n")
+	prod := writeTemp(t, ".ini", "[s]\nk = b\n")
+
+	_, stderr, exitCode := iq(t, "eval-all", "--merge-strict", base, prod)
+	assert.Equal(t, 1, exitCode)
+	assert.Contains(t, stderr, "merge conflict")
+}
+
+func TestE2E_EvalAll_MutuallyExclusiveFlags_Exits1(t *testing.T) {
+	base := writeTemp(t, ".ini", "[s]\nk = a\n")
+	prod := writeTemp(t, ".ini", "[s]\nk = b\n")
+
+	_, _, exitCode := iq(t, "eval-all", "--merge-append", "--merge-strict", base, prod)
+	assert.Equal(t, 1, exitCode)
+}
+
+func TestE2E_EvalAll_RequiresTwoFiles(t *testing.T) {
+	base := writeTemp(t, ".ini", "[s]\nk = a\n")
+
+	_, _, exitCode := iq(t, "eval-all", base)
+	assert.Equal(t, 1, exitCode)
+}
+
+func TestE2E_EvalAll_Gitconfig_SubsectionRoundTrip(t *testing.T) {
+	a := writeTemp(t, ".gitconfig", "[remote \"origin\"]\n\turl = https://old.example.com\n[core]\n\tbare = false\n")
+	b := writeTemp(t, ".gitconfig", "[remote \"origin\"]\n\turl = https://new.example.com\n")
+
+	stdout, _, exitCode := iq(t, "eval-all", a, b)
+	assert.Equal(t, 0, exitCode)
+	assert.Contains(t, stdout, `[remote "origin"]`)
+	assert.Contains(t, stdout, "url = https://new.example.com")
+	assert.Contains(t, stdout, "bare = false")
+}

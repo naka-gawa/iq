@@ -201,3 +201,66 @@ func unmarshalJSON(data []byte, v any) error {
 	dec := bytes.NewReader(data)
 	return json.NewDecoder(dec).Decode(v)
 }
+
+func TestWriteMergedINI_SectionsAndGlobals(t *testing.T) {
+	m := map[string]any{
+		"global": "g",
+		"database": map[string]any{
+			"host": "prod.example.com",
+			"port": "5432",
+		},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, serializer.WriteMergedINI(m, &buf))
+	out := buf.String()
+	assert.Contains(t, out, "global = g")
+	assert.Contains(t, out, "[database]")
+	assert.Contains(t, out, "host = prod.example.com")
+	assert.Contains(t, out, "port = 5432")
+}
+
+func TestWriteMergedINI_ArrayExpandsToRepeatedKeys(t *testing.T) {
+	m := map[string]any{
+		"Service": map[string]any{
+			"ExecStart": []any{"/bin/a", "/bin/b"},
+		},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, serializer.WriteMergedINI(m, &buf))
+	out := buf.String()
+	assert.Contains(t, out, "ExecStart = /bin/a")
+	assert.Contains(t, out, "ExecStart = /bin/b")
+}
+
+func TestWriteMergedINI_NestedMapBecomesSubsection(t *testing.T) {
+	m := map[string]any{
+		"remote": map[string]any{
+			"origin": map[string]any{"url": "https://example.com"},
+		},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, serializer.WriteMergedINI(m, &buf))
+	assert.Contains(t, buf.String(), `[remote "origin"]`)
+}
+
+func TestWriteMergedJSON_CoercesLeaves(t *testing.T) {
+	m := map[string]any{
+		"database": map[string]any{"port": "5432", "host": "localhost"},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, serializer.WriteMergedJSON(m, &buf, false))
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &got))
+	db := got["database"].(map[string]any)
+	assert.Equal(t, float64(5432), db["port"]) // coerced to number
+	assert.Equal(t, "localhost", db["host"])
+}
+
+func TestWriteMergedJSON_RawStrings(t *testing.T) {
+	m := map[string]any{"s": map[string]any{"port": "5432"}}
+	var buf bytes.Buffer
+	require.NoError(t, serializer.WriteMergedJSON(m, &buf, true))
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &got))
+	assert.Equal(t, "5432", got["s"].(map[string]any)["port"])
+}
