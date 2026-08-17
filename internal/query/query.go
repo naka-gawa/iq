@@ -87,6 +87,13 @@ func FormatValue(v any) (string, error) {
 	}
 }
 
+// ToMap converts a *ini.File into a map[string]any using the same shape as the
+// query evaluator (sections as nested maps, global keys flattened to the top
+// level, duplicate keys as arrays). It is exported for reuse by the merge path.
+func ToMap(f *ini.File) map[string]any {
+	return toMap(f)
+}
+
 // toMap converts a *ini.File into a map[string]any for gojq evaluation.
 // All values are kept as strings; type coercion is the serializer's responsibility.
 // Keys before the first section header are placed at the top level.

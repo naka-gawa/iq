@@ -540,3 +540,135 @@ func TestE2E_Interactive_PipedStdin_NoTTY_ReturnsError(t *testing.T) {
 	assert.Equal(t, 1, exitCode)
 	assert.Contains(t, stderr, "ERROR:")
 }
+
+// --- Scenario: eval-all multi-file merge (PRD 5.3) ---
+
+// writeTemp writes content to a uniquely named temp file with the given
+// extension and returns its path. Used to drive eval-all with real files.
+func writeTemp(t *testing.T, ext, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "iq-merge-*"+ext)
+	require.NoError(t, err)
+	_, err = f.WriteString(content)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+	return f.Name()
+}
+
+func TestE2E_EvalAll(t *testing.T) {
+	type fixture struct {
+		ext     string
+		content string
+	}
+	tests := []struct {
+		name        string
+		files       []fixture
+		flags       []string // flags placed before the file arguments
+		wantExit    int
+		stdoutRegex []string
+		stderrHas   []string
+	}{
+		{
+			name: "overwrite: later file wins, unique keys preserved",
+			files: []fixture{
+				{".ini", "[database]\nhost = localhost\nport = 5432\n"},
+				{".ini", "[database]\nhost = prod.example.com\n"},
+			},
+			wantExit:    0,
+			stdoutRegex: []string{`host\s*=\s*prod\.example\.com`, `port\s*=\s*5432`},
+		},
+		{
+			name: "global keys merge",
+			files: []fixture{
+				{".ini", "global = a\n[s]\nk = 1\n"},
+				{".ini", "other = b\n"},
+			},
+			wantExit:    0,
+			stdoutRegex: []string{`global\s*=\s*a`, `other\s*=\s*b`},
+		},
+		{
+			name: "json output coerces types",
+			files: []fixture{
+				{".ini", "[database]\nport = 5432\n"},
+				{".ini", "[cache]\nttl = 60\n"},
+			},
+			flags:       []string{"-o", "json"},
+			wantExit:    0,
+			stdoutRegex: []string{`"port": 5432`, `"ttl": 60`},
+		},
+		{
+			name: "append unions conflicting values",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:       []string{"--merge-append"},
+			wantExit:    0,
+			stdoutRegex: []string{`k\s*=\s*a`, `k\s*=\s*b`},
+		},
+		{
+			name: "strict conflict exits 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:     []string{"--merge-strict"},
+			wantExit:  1,
+			stderrHas: []string{"merge conflict"},
+		},
+		{
+			name: "mutually exclusive merge flags exit 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:     []string{"--merge-append", "--merge-strict"},
+			wantExit:  1,
+			stderrHas: []string{"mutually exclusive"},
+		},
+		{
+			name: "invalid output format exits 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:     []string{"-o", "yaml"},
+			wantExit:  1,
+			stderrHas: []string{"invalid output format"},
+		},
+		{
+			name: "fewer than two files exits 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+			},
+			wantExit: 1,
+		},
+		{
+			name: "gitconfig subsection round-trips without empty parent",
+			files: []fixture{
+				{".gitconfig", "[remote \"origin\"]\n\turl = https://old.example.com\n[core]\n\tbare = false\n"},
+				{".gitconfig", "[remote \"origin\"]\n\turl = https://new.example.com\n"},
+			},
+			wantExit:    0,
+			stdoutRegex: []string{`\[remote "origin"\]`, `url\s*=\s*https://new\.example\.com`, `bare\s*=\s*false`},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := append([]string{"eval-all"}, tt.flags...)
+			for _, fx := range tt.files {
+				args = append(args, writeTemp(t, fx.ext, fx.content))
+			}
+
+			stdout, stderr, exitCode := iq(t, args...)
+			assert.Equal(t, tt.wantExit, exitCode)
+			for _, re := range tt.stdoutRegex {
+				assert.Regexp(t, re, stdout)
+			}
+			for _, s := range tt.stderrHas {
+				assert.Contains(t, stderr, s)
+			}
+		})
+	}
+}

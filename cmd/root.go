@@ -95,6 +95,7 @@ func NewRootCommand() *cobra.Command {
 func Execute() error {
 	rootCmd := NewRootCommand()
 	rootCmd.AddCommand(newVersionCommand())
+	rootCmd.AddCommand(newEvalAllCommand())
 	return rootCmd.Execute()
 }
 

@@ -201,3 +201,93 @@ func unmarshalJSON(data []byte, v any) error {
 	dec := bytes.NewReader(data)
 	return json.NewDecoder(dec).Decode(v)
 }
+
+func TestWriteMergedINI(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   map[string]any
+		want    []string // substrings expected in the output
+		notWant []string // substrings that must not appear
+	}{
+		{
+			name: "sections and global keys",
+			input: map[string]any{
+				"global":   "g",
+				"database": map[string]any{"host": "prod.example.com", "port": "5432"},
+			},
+			want: []string{"global = g", "[database]", "host = prod.example.com", "port = 5432"},
+		},
+		{
+			name:  "array value expands to repeated keys",
+			input: map[string]any{"Service": map[string]any{"ExecStart": []any{"/bin/a", "/bin/b"}}},
+			want:  []string{"ExecStart = /bin/a", "ExecStart = /bin/b"},
+		},
+		{
+			name:    "nested map becomes a subsection without an empty parent",
+			input:   map[string]any{"remote": map[string]any{"origin": map[string]any{"url": "https://example.com"}}},
+			want:    []string{`[remote "origin"]`, "url = https://example.com"},
+			notWant: []string{"[remote]"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			require.NoError(t, serializer.WriteMergedINI(tt.input, &buf))
+			out := buf.String()
+			for _, w := range tt.want {
+				assert.Contains(t, out, w)
+			}
+			for _, nw := range tt.notWant {
+				assert.NotContains(t, out, nw)
+			}
+		})
+	}
+}
+
+func TestWriteMergedINI_Deterministic(t *testing.T) {
+	input := map[string]any{
+		"b": map[string]any{"k": "1"},
+		"a": map[string]any{"k": "2"},
+		"c": map[string]any{"k": "3"},
+	}
+	var first bytes.Buffer
+	require.NoError(t, serializer.WriteMergedINI(input, &first))
+	for i := 0; i < 5; i++ {
+		var buf bytes.Buffer
+		require.NoError(t, serializer.WriteMergedINI(input, &buf))
+		assert.Equal(t, first.String(), buf.String(), "output must be identical across runs")
+	}
+}
+
+func TestWriteMergedJSON(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      map[string]any
+		rawStrings bool
+		want       map[string]any // decoded expectation
+	}{
+		{
+			name:       "type coercion applied",
+			input:      map[string]any{"database": map[string]any{"port": "5432", "host": "localhost"}},
+			rawStrings: false,
+			want:       map[string]any{"database": map[string]any{"port": float64(5432), "host": "localhost"}},
+		},
+		{
+			name:       "raw strings disables coercion",
+			input:      map[string]any{"s": map[string]any{"port": "5432"}},
+			rawStrings: true,
+			want:       map[string]any{"s": map[string]any{"port": "5432"}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			require.NoError(t, serializer.WriteMergedJSON(tt.input, &buf, tt.rawStrings))
+			var got map[string]any
+			require.NoError(t, json.Unmarshal(buf.Bytes(), &got))
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

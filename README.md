@@ -87,6 +87,24 @@ iq -o json config.ini
 iq --raw-strings -o json config.ini
 ```
 
+### Merge multiple files (`eval-all`)
+
+```bash
+# deep-merge prod.ini over base.ini (later files win on conflict)
+iq eval-all base.ini prod.ini
+
+# merge to JSON
+iq eval-all -o json base.ini prod.ini
+
+# union conflicting values into arrays
+iq eval-all --merge-append base.ini prod.ini
+
+# fail (exit 1) if two files disagree on a key
+iq eval-all --merge-strict base.ini prod.ini
+```
+
+`eval-all` requires two or more files and merges them section by section: keys in later files overwrite earlier ones, while keys unique to earlier files are preserved. Because the result is synthesized from multiple sources, comments from the inputs are not carried over. Output defaults to INI; use `-o json` to emit JSON.
+
 ### Advanced queries (jq pipes and filters)
 
 ```bash
@@ -120,6 +138,14 @@ Press Enter to print the final query to stdout; Esc or Ctrl+C exits without prin
 | `--raw-strings` | — | `false` | Disable JSON type coercion (all values as strings) |
 | `--profile` | — | `generic` | Dialect profile: `generic`, `systemd`, `gitconfig` (auto-detected from file extension when omitted) |
 | `--ignore-case` | — | `false` | Case-insensitive key and section matching |
+
+**`eval-all` subcommand flags** (in addition to `-o`, `--raw-strings`, `--profile`, `--ignore-case`):
+
+| Flag | Default | Description |
+|---|---|---|
+| `--merge-overwrite` | `false` | Later files win on conflict (the policy applied when no merge flag is set) |
+| `--merge-append` | `false` | Union conflicting values into an array |
+| `--merge-strict` | `false` | Error (exit 1) when files disagree on a key |
 
 ## Prerequisites / Environment
 

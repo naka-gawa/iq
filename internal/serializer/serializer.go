@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	"gopkg.in/ini.v1"
@@ -74,6 +75,140 @@ func WriteJSON(f *ini.File, w io.Writer, rawStrings bool, transform func(map[str
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	return enc.Encode(m)
+}
+
+// WriteMergedINI renders a merged document (as produced by internal/merge) to w
+// as INI text. Top-level scalar keys become global properties; nested maps
+// become sections; two-level nested maps become gitconfig-style subsections
+// (`[section "subsection"]`); array values are expanded to repeated keys.
+func WriteMergedINI(m map[string]any, w io.Writer) error {
+	f := ini.Empty(ini.LoadOptions{AllowShadows: true})
+
+	// Keys are visited in sorted order so identical input always serializes
+	// identically (Go map iteration order is otherwise randomized).
+	def := f.Section(ini.DefaultSection)
+	for _, name := range sortedKeys(m) {
+		if sub, ok := m[name].(map[string]any); ok {
+			if err := writeSection(f, name, sub); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := writeKey(def, name, m[name]); err != nil {
+			return err
+		}
+	}
+
+	_, err := f.WriteTo(w)
+	return err
+}
+
+// writeSection materializes a section and its keys in deterministic order.
+// Nested maps are emitted as gitconfig-style subsections. The parent section is
+// created lazily on its first scalar key, so a section that holds only
+// subsections does not emit an empty `[parent]` header before them.
+func writeSection(f *ini.File, name string, body map[string]any) error {
+	keys := sortedKeys(body)
+
+	// First pass: scalar keys (creating the parent section lazily).
+	var sec *ini.Section
+	for _, k := range keys {
+		if _, isMap := body[k].(map[string]any); isMap {
+			continue
+		}
+		if sec == nil {
+			s, err := f.NewSection(name)
+			if err != nil {
+				return fmt.Errorf("create section %q: %w", name, err)
+			}
+			sec = s
+		}
+		if err := writeKey(sec, k, body[k]); err != nil {
+			return err
+		}
+	}
+
+	// Second pass: nested maps become subsections.
+	for _, k := range keys {
+		sub, isMap := body[k].(map[string]any)
+		if !isMap {
+			continue
+		}
+		if err := writeSection(f, fmt.Sprintf("%s %q", name, k), sub); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// sortedKeys returns the map's keys in ascending order for deterministic output.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// writeKey writes a single key, expanding []any into repeated (shadow) keys.
+func writeKey(sec *ini.Section, name string, v any) error {
+	vals := toStrings(v)
+	if len(vals) == 0 {
+		return nil
+	}
+	key, err := sec.NewKey(name, vals[0])
+	if err != nil {
+		return fmt.Errorf("create key %q: %w", name, err)
+	}
+	for _, extra := range vals[1:] {
+		if err := key.AddShadow(extra); err != nil {
+			return fmt.Errorf("add shadow for key %q: %w", name, err)
+		}
+	}
+	return nil
+}
+
+// toStrings normalizes a scalar or []any value into a slice of strings.
+func toStrings(v any) []string {
+	if arr, ok := v.([]any); ok {
+		out := make([]string, len(arr))
+		for i, e := range arr {
+			out[i] = fmt.Sprintf("%v", e)
+		}
+		return out
+	}
+	return []string{fmt.Sprintf("%v", v)}
+}
+
+// WriteMergedJSON renders a merged document to w as JSON, applying the same type
+// coercion as INI-to-JSON conversion (disabled when rawStrings is true).
+func WriteMergedJSON(m map[string]any, w io.Writer, rawStrings bool) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(coerceValue(m, rawStrings))
+}
+
+// coerceValue recursively coerces string leaves in a merged document.
+func coerceValue(v any, rawStrings bool) any {
+	switch val := v.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, e := range val {
+			out[k] = coerceValue(e, rawStrings)
+		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, e := range val {
+			out[i] = coerceValue(e, rawStrings)
+		}
+		return out
+	case string:
+		return coerce(val, rawStrings)
+	default:
+		return val
+	}
 }
 
 // toJSONMap converts the INI AST to a nested map suitable for JSON encoding.
