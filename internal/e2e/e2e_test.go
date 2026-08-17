@@ -555,77 +555,120 @@ func writeTemp(t *testing.T, ext, content string) string {
 	return f.Name()
 }
 
-func TestE2E_EvalAll_Overwrite_LaterWins(t *testing.T) {
-	base := writeTemp(t, ".ini", "[database]\nhost = localhost\nport = 5432\n")
-	prod := writeTemp(t, ".ini", "[database]\nhost = prod.example.com\n")
+func TestE2E_EvalAll(t *testing.T) {
+	type fixture struct {
+		ext     string
+		content string
+	}
+	tests := []struct {
+		name        string
+		files       []fixture
+		flags       []string // flags placed before the file arguments
+		wantExit    int
+		stdoutRegex []string
+		stderrHas   []string
+	}{
+		{
+			name: "overwrite: later file wins, unique keys preserved",
+			files: []fixture{
+				{".ini", "[database]\nhost = localhost\nport = 5432\n"},
+				{".ini", "[database]\nhost = prod.example.com\n"},
+			},
+			wantExit:    0,
+			stdoutRegex: []string{`host\s*=\s*prod\.example\.com`, `port\s*=\s*5432`},
+		},
+		{
+			name: "global keys merge",
+			files: []fixture{
+				{".ini", "global = a\n[s]\nk = 1\n"},
+				{".ini", "other = b\n"},
+			},
+			wantExit:    0,
+			stdoutRegex: []string{`global\s*=\s*a`, `other\s*=\s*b`},
+		},
+		{
+			name: "json output coerces types",
+			files: []fixture{
+				{".ini", "[database]\nport = 5432\n"},
+				{".ini", "[cache]\nttl = 60\n"},
+			},
+			flags:       []string{"-o", "json"},
+			wantExit:    0,
+			stdoutRegex: []string{`"port": 5432`, `"ttl": 60`},
+		},
+		{
+			name: "append unions conflicting values",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:       []string{"--merge-append"},
+			wantExit:    0,
+			stdoutRegex: []string{`k\s*=\s*a`, `k\s*=\s*b`},
+		},
+		{
+			name: "strict conflict exits 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:     []string{"--merge-strict"},
+			wantExit:  1,
+			stderrHas: []string{"merge conflict"},
+		},
+		{
+			name: "mutually exclusive merge flags exit 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:     []string{"--merge-append", "--merge-strict"},
+			wantExit:  1,
+			stderrHas: []string{"mutually exclusive"},
+		},
+		{
+			name: "invalid output format exits 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+				{".ini", "[s]\nk = b\n"},
+			},
+			flags:     []string{"-o", "yaml"},
+			wantExit:  1,
+			stderrHas: []string{"invalid output format"},
+		},
+		{
+			name: "fewer than two files exits 1",
+			files: []fixture{
+				{".ini", "[s]\nk = a\n"},
+			},
+			wantExit: 1,
+		},
+		{
+			name: "gitconfig subsection round-trips without empty parent",
+			files: []fixture{
+				{".gitconfig", "[remote \"origin\"]\n\turl = https://old.example.com\n[core]\n\tbare = false\n"},
+				{".gitconfig", "[remote \"origin\"]\n\turl = https://new.example.com\n"},
+			},
+			wantExit:    0,
+			stdoutRegex: []string{`\[remote "origin"\]`, `url\s*=\s*https://new\.example\.com`, `bare\s*=\s*false`},
+		},
+	}
 
-	stdout, _, exitCode := iq(t, "eval-all", base, prod)
-	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout, "host = prod.example.com") // overwritten
-	assert.Contains(t, stdout, "port = 5432")             // preserved from base
-}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			args := append([]string{"eval-all"}, tt.flags...)
+			for _, fx := range tt.files {
+				args = append(args, writeTemp(t, fx.ext, fx.content))
+			}
 
-func TestE2E_EvalAll_GlobalKeys_Merged(t *testing.T) {
-	a := writeTemp(t, ".ini", "global = a\n[s]\nk = 1\n")
-	b := writeTemp(t, ".ini", "other = b\n")
-
-	stdout, _, exitCode := iq(t, "eval-all", a, b)
-	assert.Equal(t, 0, exitCode)
-	assert.Regexp(t, `global\s*=\s*a`, stdout)
-	assert.Regexp(t, `other\s*=\s*b`, stdout)
-}
-
-func TestE2E_EvalAll_JSON_Coercion(t *testing.T) {
-	base := writeTemp(t, ".ini", "[database]\nport = 5432\n")
-	prod := writeTemp(t, ".ini", "[cache]\nttl = 60\n")
-
-	stdout, _, exitCode := iq(t, "eval-all", "-o", "json", base, prod)
-	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout, `"port": 5432`)
-	assert.Contains(t, stdout, `"ttl": 60`)
-}
-
-func TestE2E_EvalAll_Append_UnionsValues(t *testing.T) {
-	base := writeTemp(t, ".ini", "[s]\nk = a\n")
-	prod := writeTemp(t, ".ini", "[s]\nk = b\n")
-
-	stdout, _, exitCode := iq(t, "eval-all", "--merge-append", base, prod)
-	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout, "k = a")
-	assert.Contains(t, stdout, "k = b")
-}
-
-func TestE2E_EvalAll_Strict_ConflictExits1(t *testing.T) {
-	base := writeTemp(t, ".ini", "[s]\nk = a\n")
-	prod := writeTemp(t, ".ini", "[s]\nk = b\n")
-
-	_, stderr, exitCode := iq(t, "eval-all", "--merge-strict", base, prod)
-	assert.Equal(t, 1, exitCode)
-	assert.Contains(t, stderr, "merge conflict")
-}
-
-func TestE2E_EvalAll_MutuallyExclusiveFlags_Exits1(t *testing.T) {
-	base := writeTemp(t, ".ini", "[s]\nk = a\n")
-	prod := writeTemp(t, ".ini", "[s]\nk = b\n")
-
-	_, _, exitCode := iq(t, "eval-all", "--merge-append", "--merge-strict", base, prod)
-	assert.Equal(t, 1, exitCode)
-}
-
-func TestE2E_EvalAll_RequiresTwoFiles(t *testing.T) {
-	base := writeTemp(t, ".ini", "[s]\nk = a\n")
-
-	_, _, exitCode := iq(t, "eval-all", base)
-	assert.Equal(t, 1, exitCode)
-}
-
-func TestE2E_EvalAll_Gitconfig_SubsectionRoundTrip(t *testing.T) {
-	a := writeTemp(t, ".gitconfig", "[remote \"origin\"]\n\turl = https://old.example.com\n[core]\n\tbare = false\n")
-	b := writeTemp(t, ".gitconfig", "[remote \"origin\"]\n\turl = https://new.example.com\n")
-
-	stdout, _, exitCode := iq(t, "eval-all", a, b)
-	assert.Equal(t, 0, exitCode)
-	assert.Contains(t, stdout, `[remote "origin"]`)
-	assert.Contains(t, stdout, "url = https://new.example.com")
-	assert.Contains(t, stdout, "bare = false")
+			stdout, stderr, exitCode := iq(t, args...)
+			assert.Equal(t, tt.wantExit, exitCode)
+			for _, re := range tt.stdoutRegex {
+				assert.Regexp(t, re, stdout)
+			}
+			for _, s := range tt.stderrHas {
+				assert.Contains(t, stderr, s)
+			}
+		})
+	}
 }

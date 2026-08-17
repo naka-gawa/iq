@@ -10,111 +10,131 @@ import (
 	"iq/internal/merge"
 )
 
-func TestMerge_Overwrite_LaterWins(t *testing.T) {
-	base := map[string]any{
-		"database": map[string]any{"host": "localhost", "port": "5432"},
-	}
-	prod := map[string]any{
-		"database": map[string]any{"host": "prod.example.com"},
+func TestMerge(t *testing.T) {
+	tests := []struct {
+		name    string
+		docs    []map[string]any
+		policy  merge.Policy
+		want    map[string]any
+		wantErr bool
+	}{
+		{
+			name: "overwrite: later file wins, unique keys preserved",
+			docs: []map[string]any{
+				{"database": map[string]any{"host": "localhost", "port": "5432"}},
+				{"database": map[string]any{"host": "prod.example.com"}},
+			},
+			policy: merge.PolicyOverwrite,
+			want:   map[string]any{"database": map[string]any{"host": "prod.example.com", "port": "5432"}},
+		},
+		{
+			name: "overwrite: global (top-level) keys merge",
+			docs: []map[string]any{
+				{"global": "a"},
+				{"other": "b"},
+			},
+			policy: merge.PolicyOverwrite,
+			want:   map[string]any{"global": "a", "other": "b"},
+		},
+		{
+			name: "overwrite: three files apply in order",
+			docs: []map[string]any{
+				{"s": map[string]any{"k": "1"}},
+				{"s": map[string]any{"k": "2"}},
+				{"s": map[string]any{"k": "3"}},
+			},
+			policy: merge.PolicyOverwrite,
+			want:   map[string]any{"s": map[string]any{"k": "3"}},
+		},
+		{
+			name: "append: unions conflicting scalars",
+			docs: []map[string]any{
+				{"s": map[string]any{"k": "a"}},
+				{"s": map[string]any{"k": "b"}},
+			},
+			policy: merge.PolicyAppend,
+			want:   map[string]any{"s": map[string]any{"k": []any{"a", "b"}}},
+		},
+		{
+			name: "append: dedups identical values",
+			docs: []map[string]any{
+				{"s": map[string]any{"k": "x"}},
+				{"s": map[string]any{"k": "x"}},
+			},
+			policy: merge.PolicyAppend,
+			want:   map[string]any{"s": map[string]any{"k": []any{"x"}}},
+		},
+		{
+			name: "append: flattens an existing array",
+			docs: []map[string]any{
+				{"s": map[string]any{"k": []any{"a", "b"}}},
+				{"s": map[string]any{"k": "c"}},
+			},
+			policy: merge.PolicyAppend,
+			want:   map[string]any{"s": map[string]any{"k": []any{"a", "b", "c"}}},
+		},
+		{
+			name: "strict: identical values are allowed",
+			docs: []map[string]any{
+				{"s": map[string]any{"k": "same"}},
+				{"s": map[string]any{"k": "same"}},
+			},
+			policy: merge.PolicyStrict,
+			want:   map[string]any{"s": map[string]any{"k": "same"}},
+		},
+		{
+			name: "strict: conflicting values error",
+			docs: []map[string]any{
+				{"s": map[string]any{"k": "a"}},
+				{"s": map[string]any{"k": "b"}},
+			},
+			policy:  merge.PolicyStrict,
+			wantErr: true,
+		},
+		{
+			name: "overwrite: section/scalar type mismatch takes later value",
+			docs: []map[string]any{
+				{"x": map[string]any{"nested": "v"}},
+				{"x": "scalar"},
+			},
+			policy: merge.PolicyOverwrite,
+			want:   map[string]any{"x": "scalar"},
+		},
+		{
+			name: "strict: section/scalar type mismatch errors",
+			docs: []map[string]any{
+				{"x": map[string]any{"nested": "v"}},
+				{"x": "scalar"},
+			},
+			policy:  merge.PolicyStrict,
+			wantErr: true,
+		},
 	}
 
-	got, err := merge.Merge([]map[string]any{base, prod}, merge.PolicyOverwrite)
-	require.NoError(t, err)
-
-	db := got["database"].(map[string]any)
-	assert.Equal(t, "prod.example.com", db["host"]) // overwritten
-	assert.Equal(t, "5432", db["port"])             // preserved from base
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := merge.Merge(tt.docs, tt.policy)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, iqerr.ErrMergeConflict)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
-func TestMerge_Overwrite_DoesNotMutateInputs(t *testing.T) {
-	base := map[string]any{"database": map[string]any{"host": "localhost"}}
-	prod := map[string]any{"database": map[string]any{"host": "prod"}}
+func TestMerge_DoesNotMutateInputs(t *testing.T) {
+	// A distinct property test: the exported Merge contract promises the input
+	// documents are never mutated, including array leaves during append.
+	base := map[string]any{"database": map[string]any{"host": "localhost", "tags": []any{"a"}}}
+	prod := map[string]any{"database": map[string]any{"host": "prod", "tags": []any{"b"}}}
 
-	_, err := merge.Merge([]map[string]any{base, prod}, merge.PolicyOverwrite)
+	_, err := merge.Merge([]map[string]any{base, prod}, merge.PolicyAppend)
 	require.NoError(t, err)
 
 	assert.Equal(t, "localhost", base["database"].(map[string]any)["host"])
-}
-
-func TestMerge_GlobalKeys_TopLevel(t *testing.T) {
-	a := map[string]any{"global": "a"}
-	b := map[string]any{"other": "b"}
-
-	got, err := merge.Merge([]map[string]any{a, b}, merge.PolicyOverwrite)
-	require.NoError(t, err)
-	assert.Equal(t, "a", got["global"])
-	assert.Equal(t, "b", got["other"])
-}
-
-func TestMerge_Append_UnionsScalars(t *testing.T) {
-	base := map[string]any{"s": map[string]any{"k": "a"}}
-	prod := map[string]any{"s": map[string]any{"k": "b"}}
-
-	got, err := merge.Merge([]map[string]any{base, prod}, merge.PolicyAppend)
-	require.NoError(t, err)
-	assert.Equal(t, []any{"a", "b"}, got["s"].(map[string]any)["k"])
-}
-
-func TestMerge_Append_Dedups(t *testing.T) {
-	a := map[string]any{"s": map[string]any{"k": "x"}}
-	b := map[string]any{"s": map[string]any{"k": "x"}}
-
-	got, err := merge.Merge([]map[string]any{a, b}, merge.PolicyAppend)
-	require.NoError(t, err)
-	assert.Equal(t, []any{"x"}, got["s"].(map[string]any)["k"])
-}
-
-func TestMerge_Append_FlattensExistingArray(t *testing.T) {
-	a := map[string]any{"s": map[string]any{"k": []any{"a", "b"}}}
-	b := map[string]any{"s": map[string]any{"k": "c"}}
-
-	got, err := merge.Merge([]map[string]any{a, b}, merge.PolicyAppend)
-	require.NoError(t, err)
-	assert.Equal(t, []any{"a", "b", "c"}, got["s"].(map[string]any)["k"])
-}
-
-func TestMerge_Strict_ErrorsOnConflict(t *testing.T) {
-	base := map[string]any{"s": map[string]any{"k": "a"}}
-	prod := map[string]any{"s": map[string]any{"k": "b"}}
-
-	_, err := merge.Merge([]map[string]any{base, prod}, merge.PolicyStrict)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, iqerr.ErrMergeConflict)
-}
-
-func TestMerge_Strict_AllowsIdenticalValues(t *testing.T) {
-	base := map[string]any{"s": map[string]any{"k": "same"}}
-	prod := map[string]any{"s": map[string]any{"k": "same"}}
-
-	got, err := merge.Merge([]map[string]any{base, prod}, merge.PolicyStrict)
-	require.NoError(t, err)
-	assert.Equal(t, "same", got["s"].(map[string]any)["k"])
-}
-
-func TestMerge_TypeMismatch_OverwriteTakesLater(t *testing.T) {
-	a := map[string]any{"x": map[string]any{"nested": "v"}}
-	b := map[string]any{"x": "scalar"}
-
-	got, err := merge.Merge([]map[string]any{a, b}, merge.PolicyOverwrite)
-	require.NoError(t, err)
-	assert.Equal(t, "scalar", got["x"])
-}
-
-func TestMerge_TypeMismatch_StrictErrors(t *testing.T) {
-	a := map[string]any{"x": map[string]any{"nested": "v"}}
-	b := map[string]any{"x": "scalar"}
-
-	_, err := merge.Merge([]map[string]any{a, b}, merge.PolicyStrict)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, iqerr.ErrMergeConflict)
-}
-
-func TestMerge_ThreeFiles_Order(t *testing.T) {
-	a := map[string]any{"s": map[string]any{"k": "1"}}
-	b := map[string]any{"s": map[string]any{"k": "2"}}
-	c := map[string]any{"s": map[string]any{"k": "3"}}
-
-	got, err := merge.Merge([]map[string]any{a, b, c}, merge.PolicyOverwrite)
-	require.NoError(t, err)
-	assert.Equal(t, "3", got["s"].(map[string]any)["k"])
+	assert.Equal(t, []any{"a"}, base["database"].(map[string]any)["tags"])
+	assert.Equal(t, []any{"b"}, prod["database"].(map[string]any)["tags"])
 }

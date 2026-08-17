@@ -40,6 +40,9 @@ carried over.`,
 		SilenceUsage: true,
 		Args:         cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if outputFmt != "ini" && outputFmt != "json" {
+				return fmt.Errorf("invalid output format %q: must be \"ini\" or \"json\"", outputFmt)
+			}
 			policy, err := resolvePolicy(mergeOverwrite, mergeAppend, mergeStrict)
 			if err != nil {
 				return err

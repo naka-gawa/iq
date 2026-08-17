@@ -92,17 +92,21 @@ func resolveScalar(dst map[string]any, key string, dv, sv any, policy Policy) er
 }
 
 // union combines two scalar-or-array values into a deduplicated []any,
-// preserving first-seen order.
+// preserving first-seen order. It copies values into a freshly owned slice and
+// never appends onto an input slice, so the Merge no-mutation contract holds
+// even for inputs whose array leaves carry spare capacity.
 func union(a, b any) []any {
 	out := make([]any, 0)
 	seen := make(map[string]struct{})
-	for _, v := range append(toSlice(a), toSlice(b)...) {
-		key := fmt.Sprintf("%v", v)
-		if _, dup := seen[key]; dup {
-			continue
+	for _, src := range [][]any{toSlice(a), toSlice(b)} {
+		for _, v := range src {
+			key := fmt.Sprintf("%v", v)
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, deepCopy(v))
 		}
-		seen[key] = struct{}{}
-		out = append(out, v)
 	}
 	return out
 }

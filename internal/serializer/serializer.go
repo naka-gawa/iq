@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 
 	"gopkg.in/ini.v1"
@@ -83,16 +84,18 @@ func WriteJSON(f *ini.File, w io.Writer, rawStrings bool, transform func(map[str
 func WriteMergedINI(m map[string]any, w io.Writer) error {
 	f := ini.Empty(ini.LoadOptions{AllowShadows: true})
 
-	for name, v := range m {
-		switch val := v.(type) {
-		case map[string]any:
-			if err := writeSection(f, name, val); err != nil {
+	// Keys are visited in sorted order so identical input always serializes
+	// identically (Go map iteration order is otherwise randomized).
+	def := f.Section(ini.DefaultSection)
+	for _, name := range sortedKeys(m) {
+		if sub, ok := m[name].(map[string]any); ok {
+			if err := writeSection(f, name, sub); err != nil {
 				return err
 			}
-		default:
-			if err := writeKey(f.Section(ini.DefaultSection), name, val); err != nil {
-				return err
-			}
+			continue
+		}
+		if err := writeKey(def, name, m[name]); err != nil {
+			return err
 		}
 	}
 
@@ -100,26 +103,52 @@ func WriteMergedINI(m map[string]any, w io.Writer) error {
 	return err
 }
 
-// writeSection materializes a section and its keys. Nested maps are emitted as
-// gitconfig-style subsections.
+// writeSection materializes a section and its keys in deterministic order.
+// Nested maps are emitted as gitconfig-style subsections. The parent section is
+// created lazily on its first scalar key, so a section that holds only
+// subsections does not emit an empty `[parent]` header before them.
 func writeSection(f *ini.File, name string, body map[string]any) error {
-	sec, err := f.NewSection(name)
-	if err != nil {
-		return fmt.Errorf("create section %q: %w", name, err)
-	}
-	for k, v := range body {
-		if sub, ok := v.(map[string]any); ok {
-			subName := fmt.Sprintf("%s %q", name, k)
-			if err := writeSection(f, subName, sub); err != nil {
-				return err
-			}
+	keys := sortedKeys(body)
+
+	// First pass: scalar keys (creating the parent section lazily).
+	var sec *ini.Section
+	for _, k := range keys {
+		if _, isMap := body[k].(map[string]any); isMap {
 			continue
 		}
-		if err := writeKey(sec, k, v); err != nil {
+		if sec == nil {
+			s, err := f.NewSection(name)
+			if err != nil {
+				return fmt.Errorf("create section %q: %w", name, err)
+			}
+			sec = s
+		}
+		if err := writeKey(sec, k, body[k]); err != nil {
+			return err
+		}
+	}
+
+	// Second pass: nested maps become subsections.
+	for _, k := range keys {
+		sub, isMap := body[k].(map[string]any)
+		if !isMap {
+			continue
+		}
+		if err := writeSection(f, fmt.Sprintf("%s %q", name, k), sub); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// sortedKeys returns the map's keys in ascending order for deterministic output.
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // writeKey writes a single key, expanding []any into repeated (shadow) keys.

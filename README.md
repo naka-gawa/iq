@@ -143,7 +143,7 @@ Press Enter to print the final query to stdout; Esc or Ctrl+C exits without prin
 
 | Flag | Default | Description |
 |---|---|---|
-| `--merge-overwrite` | `true` | Later files win on conflict |
+| `--merge-overwrite` | `false` | Later files win on conflict (the policy applied when no merge flag is set) |
 | `--merge-append` | `false` | Union conflicting values into an array |
 | `--merge-strict` | `false` | Error (exit 1) when files disagree on a key |
 
