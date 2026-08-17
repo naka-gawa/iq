@@ -8,7 +8,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/itchyny/gojq v0.12.19
 	github.com/spf13/cobra v1.10.2
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.0
 	gopkg.in/ini.v1 v1.67.3
 )
 
