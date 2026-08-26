@@ -4,7 +4,7 @@ go 1.25.6
 
 require (
 	charm.land/bubbles/v2 v2.1.1
-	charm.land/bubbletea/v2 v2.0.8
+	charm.land/bubbletea/v2 v2.0.9
 	github.com/fatih/color v1.19.0
 	github.com/itchyny/gojq v0.12.19
 	github.com/spf13/cobra v1.10.2
