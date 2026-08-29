@@ -3,7 +3,7 @@ module iq
 go 1.25.6
 
 require (
-	charm.land/bubbles/v2 v2.2.0
+	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.9
 	github.com/fatih/color v1.19.0
 	github.com/itchyny/gojq v0.12.19
