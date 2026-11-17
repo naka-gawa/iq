@@ -11,7 +11,7 @@ require (
 	github.com/itchyny/gojq v0.12.20
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	gopkg.in/ini.v1 v1.67.3
+	gopkg.in/ini.v1 v1.68.0
 )
 
 require (
